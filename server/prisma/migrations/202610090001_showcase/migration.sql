@@ -1,0 +1,26 @@
+-- 展示站增量迁移：只创建五张新表，不变更 NeoBlog 表和迁移历史；支持重复执行。
+CREATE TABLE IF NOT EXISTS personal_status (
+  id INTEGER NOT NULL DEFAULT 1, text VARCHAR(500) NOT NULL, availability VARCHAR(20) NOT NULL,
+  visible BOOLEAN NOT NULL DEFAULT false, expiresAt DATETIME(3) NULL, updatedAt DATETIME(3) NOT NULL,
+  PRIMARY KEY (id)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS learning_goals (
+  id INTEGER NOT NULL AUTO_INCREMENT, title VARCHAR(100) NOT NULL, description VARCHAR(1000) NULL,
+  progress INTEGER NULL, status VARCHAR(20) NOT NULL DEFAULT 'planned', visible BOOLEAN NOT NULL DEFAULT false,
+  sortOrder INTEGER NOT NULL DEFAULT 0, createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3), updatedAt DATETIME(3) NOT NULL,
+  PRIMARY KEY (id)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS showcase_modules (
+  id VARCHAR(64) NOT NULL, source VARCHAR(20) NOT NULL, visible BOOLEAN NOT NULL DEFAULT false,
+  updatedAt DATETIME(3) NOT NULL, PRIMARY KEY (id)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS showcase_cache (
+  moduleId VARCHAR(64) NOT NULL, payload JSON NULL, lastAttemptAt DATETIME(3) NULL, lastSuccessAt DATETIME(3) NULL,
+  nextAttemptAt DATETIME(3) NULL, lastResult VARCHAR(20) NOT NULL DEFAULT 'never', lastErrorCode VARCHAR(64) NULL,
+  lastErrorMessage VARCHAR(500) NULL, upstreamStatus INTEGER NULL, durationMs INTEGER NULL, etag VARCHAR(255) NULL,
+  blocked BOOLEAN NOT NULL DEFAULT false, PRIMARY KEY (moduleId)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS showcase_item_visibility (
+  moduleId VARCHAR(64) NOT NULL, itemId VARCHAR(100) NOT NULL, visible BOOLEAN NOT NULL DEFAULT false,
+  updatedAt DATETIME(3) NOT NULL, PRIMARY KEY (moduleId, itemId)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

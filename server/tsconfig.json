@@ -1,0 +1,5 @@
+/** 后端 TypeScript 配置；定义严格校验、CommonJS 输出和服务、脚本、测试的编译范围。 */
+{
+  "compilerOptions": {"target": "ES2022", "module": "CommonJS", "moduleResolution": "Node", "esModuleInterop": true, "strict": true, "skipLibCheck": true, "outDir": "dist", "rootDir": "."},
+  "include": ["src/**/*.ts", "config/**/*.ts", "middleware/**/*.ts", "services/**/*.ts", "utils/**/*.ts", "types/**/*.ts", "mappers/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts"]
+}

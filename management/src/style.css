@@ -1,0 +1,28 @@
+/** 管理页面基础样式；提供可读表单、列表、状态反馈和窄屏布局，不引入装饰性动画。 */
+:root { font-family: system-ui, "Microsoft YaHei", sans-serif; color: #17212c; background: #f5f6f8; line-height: 1.6; font-synthesis: none; --border: #c8cfd8; --primary: #245c9f; --error: #a41d26; --success: #216039; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+header, main { max-width: 1180px; margin: auto; padding: 24px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+h1 { font-size: 24px; margin: 0; } h2 { font-size: 22px; margin-top: 0; } h3 { font-size: 18px; }
+p { margin: 8px 0 16px; } small { display: block; color: #4a5665; }
+section { background: white; border: 1px solid var(--border); border-radius: 6px; padding: 24px; margin-bottom: 24px; }
+nav, .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+nav { margin-bottom: 24px; } nav a { padding: 10px 16px; background: white; border: 1px solid var(--border); border-radius: 4px; text-decoration: none; color: inherit; }
+nav a.router-link-active { background: var(--primary); color: white; border-color: var(--primary); }
+a { color: var(--primary); } button, input, select, textarea { font: inherit; }
+button { min-height: 44px; padding: 8px 14px; background: white; border: 1px solid var(--border); border-radius: 4px; color: inherit; cursor: pointer; }
+button:hover:enabled { background: #edf2f8; } button:disabled { opacity: .55; cursor: wait; }
+button.primary { background: var(--primary); color: white; border-color: var(--primary); } button.primary:hover:enabled { background: #17457d; }
+button.danger, .error { color: var(--error); } .success { color: var(--success); }
+:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+label { display: flex; flex-direction: column; gap: 6px; margin: 16px 0; }
+input, textarea, select { width: 100%; min-height: 44px; border: 1px solid #8996a6; border-radius: 4px; background: white; color: inherit; padding: 8px 10px; }
+textarea { resize: vertical; } .check { flex-direction: row; align-items: center; gap: 12px; } .check input { width: 20px; height: 20px; min-height: auto; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 20px; } .source-list { margin: 24px 0; } .source-list article { background: #f5f6f8; padding: 16px; border-radius: 4px; }
+.table-wrap { overflow-x: auto; margin: 24px 0; } table { width: 100%; border-collapse: collapse; text-align: left; } th, td { border-bottom: 1px solid var(--border); padding: 12px; vertical-align: top; } th { white-space: nowrap; background: #f5f6f8; }
+.data-item { padding: 16px 0; border-bottom: 1px solid var(--border); } pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f5f6f8; padding: 16px; font-size: 14px; max-height: 500px; overflow-y: auto; } summary { cursor: pointer; padding: 12px 0; }
+.confirmation { padding: 16px; border: 1px solid var(--error); border-radius: 4px; margin: 16px 0; }
+.skip { position: absolute; top: -100px; left: 16px; background: white; padding: 12px; } .skip:focus { top: 8px; z-index: 10; }
+@media (max-width: 600px) { header, main { padding: 16px; } header { align-items: flex-start; flex-direction: column; } section { padding: 16px; } nav { gap: 8px; } nav a { flex-grow: 1; text-align: center; padding: 10px 8px; } td { min-width: 110px; } .toolbar.filters label { flex: 1; } }

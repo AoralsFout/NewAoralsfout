@@ -1,0 +1,10 @@
+{
+  "$comment": "管理页面依赖与命令配置：提供 Vue 页面开发、类型检查、构建和本地预览入口。",
+  "name": "@aoralsfout/management",
+  "private": true,
+  "description": "展示站管理页面：提供状态、目标、同步和可见性维护。",
+  "type": "module",
+  "scripts": {"dev": "vite --host localhost", "build": "vue-tsc --noEmit && vite build", "preview": "vite preview --host localhost"},
+  "dependencies": {"vue": "^3.5.31", "pinia": "^3.0.4", "vue-router": "^5.0.4"},
+  "devDependencies": {"@types/node": "^24.0.0", "@vitejs/plugin-vue": "^6.0.5", "typescript": "~5.9.3", "vite": "^8.0.12", "vue-tsc": "^3.2.7"}
+}

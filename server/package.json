@@ -1,0 +1,25 @@
+{
+  "$comment": "后端依赖与命令配置：提供独立展示服务的启动、编译、Prisma 生成和测试入口。",
+  "name": "@aoralsfout/server",
+  "private": true,
+  "description": "复用 NeoBlog 鉴权和数据库的独立展示站服务。",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "db:generate": "prisma generate",
+    "start": "node dist/src/index.js",
+    "db:setup": "tsx scripts/setup-database.ts",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "6.2.1", "axios": "^1.7.9", "bcrypt": "^6.0.0",
+    "dotenv": "^16.4.7", "express": "^5.2.1", "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0", "jsonwebtoken": "^9.0.2", "mysql2": "^3.12.0",
+    "winston": "^3.15.0", "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2", "@types/express": "^5.0.6", "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^24.0.0", "@types/supertest": "^6.0.3", "prisma": "6.2.1",
+    "supertest": "^7.0.0", "tsx": "^4.20.0", "typescript": "~5.9.3"
+  }
+}

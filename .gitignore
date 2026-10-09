@@ -1,1 +1,12 @@
 /docs/research/
+# 本地依赖、构建产物和环境凭据均不进入版本控制。
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+logs/
+*.log
+*.tsbuildinfo
+coverage/
+.tmp/

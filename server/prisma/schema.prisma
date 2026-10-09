@@ -1,0 +1,174 @@
+/// 复用 NeoBlog 数据模型以兼容共享数据库；下方展示站模型仅新增独立表。
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+/// 当前状态单例，由管理接口维护并在公开读取时检查有效期。
+model PersonalStatus {
+  id Int @id @default(1)
+  text String @db.VarChar(500)
+  availability String @db.VarChar(20)
+  visible Boolean @default(false)
+  expiresAt DateTime? @db.DateTime(3)
+  updatedAt DateTime @updatedAt @db.DateTime(3)
+  @@map("personal_status")
+}
+
+/// 学习目标及其进度、归档状态、排序和可见性。
+model LearningGoal {
+  id Int @id @default(autoincrement())
+  title String @db.VarChar(100)
+  description String? @db.VarChar(1000)
+  progress Int?
+  status String @default("planned") @db.VarChar(20)
+  visible Boolean @default(false)
+  sortOrder Int @default(0)
+  createdAt DateTime @default(now()) @db.DateTime(3)
+  updatedAt DateTime @updatedAt @db.DateTime(3)
+  @@map("learning_goals")
+}
+
+/// 固定模块开关；不接收任意来源或 URL。
+model ShowcaseModule {
+  id String @id @db.VarChar(64)
+  source String @db.VarChar(20)
+  visible Boolean @default(false)
+  updatedAt DateTime @updatedAt @db.DateTime(3)
+  @@map("showcase_modules")
+}
+
+/// 最近完整快照与采集状态；失败不覆盖 payload。
+model ShowcaseCache {
+  moduleId String @id @db.VarChar(64)
+  payload Json?
+  lastAttemptAt DateTime? @db.DateTime(3)
+  lastSuccessAt DateTime? @db.DateTime(3)
+  nextAttemptAt DateTime? @db.DateTime(3)
+  lastResult String @default("never") @db.VarChar(20)
+  lastErrorCode String? @db.VarChar(64)
+  lastErrorMessage String? @db.VarChar(500)
+  upstreamStatus Int?
+  durationMs Int?
+  etag String? @db.VarChar(255)
+  blocked Boolean @default(false)
+  @@map("showcase_cache")
+}
+
+/// 条目隐藏覆盖；同步不会删除，恢复公开时删除覆盖记录。
+model ShowcaseItemVisibility {
+  moduleId String @db.VarChar(64)
+  itemId String @db.VarChar(100)
+  visible Boolean @default(false)
+  updatedAt DateTime @updatedAt @db.DateTime(3)
+  @@id([moduleId, itemId])
+  @@map("showcase_item_visibility")
+}
+
+model User {
+  id            Int      @id @default(autoincrement())
+  natayark_id   Int      @unique
+  username      String
+  email         String   @unique
+  avatar        String?
+  role          Role     @default(MEMBER)
+  status        Status   @default(NORMAL)
+  token_version Int      @default(0) @map("token_version")
+  last_login    DateTime?
+  created_at    DateTime @default(now()) @map("created_at")
+  updated_at    DateTime @updatedAt @map("updated_at")
+
+  comments         Comment[]
+  commentReactions CommentReaction[]
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+enum Status {
+  NORMAL
+  BANNED
+  FROZEN
+}
+
+model Article {
+  id          Int      @id @default(autoincrement())
+  title       String
+  content     String   @db.LongText
+  summary     String?  @db.VarChar(500)
+  cover_image String?
+  tags        String?  @db.VarChar(500)
+  views       Int      @default(0)
+  author_id   Int
+  created_at  DateTime @default(now()) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
+
+  @@map("articles")
+}
+
+model Music {
+  id          Int      @id @default(autoincrement())
+  title       String   @default("未知歌曲") @db.VarChar(255)
+  author      String   @default("佚名") @db.VarChar(255)
+  album       String?  @db.VarChar(255)
+  format      String?  @default("mp3") @db.VarChar(50)
+  duration    String?  @db.VarChar(10)
+  chorusIn    Float?
+  chorusOut   Float?
+  BPM         Int?
+  language    String?  @db.VarChar(50)
+  isTranslate Boolean? @map("isTranslate")
+  bgPositionY Int?
+  mainColor   String?  @default("#ffffff") @db.VarChar(50) @map("mainColor")
+
+  @@map("musics")
+}
+
+enum ReactionType {
+  LIKE
+  DISLIKE
+}
+
+model Comment {
+  id             Int               @id @default(autoincrement())
+  content        String
+  source_id      String           @db.VarChar(100)
+  source_type    String           @db.VarChar(20)
+  user_id        Int
+  parent_id      Int?
+  likes_count    Int               @default(0)
+  dislikes_count Int               @default(0)
+  created_at     DateTime          @default(now()) @map("created_at")
+  updated_at     DateTime          @updatedAt @map("updated_at")
+
+  user           User              @relation(fields: [user_id], references: [id])
+  parent         Comment?          @relation("CommentReplies", fields: [parent_id], references: [id])
+  replies        Comment[]         @relation("CommentReplies")
+  reactions      CommentReaction[]
+
+  @@index([source_id, source_type])
+  @@index([parent_id])
+  @@map("comments")
+}
+
+model CommentReaction {
+  id         Int          @id @default(autoincrement())
+  comment_id Int
+  user_id    Int
+  type       ReactionType
+  created_at DateTime     @default(now()) @map("created_at")
+
+  comment    Comment      @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  user       User         @relation(fields: [user_id], references: [id])
+
+  @@unique([comment_id, user_id])
+  @@map("comment_reactions")
+}
