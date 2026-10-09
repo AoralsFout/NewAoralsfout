@@ -2,7 +2,7 @@
 import { z } from 'zod';
 export const goalStatus = z.enum(['planned', 'active', 'paused', 'completed']);
 export const statusInput = z.object({
-  text: z.string().max(500), availability: z.enum(['open', 'limited', 'closed', 'unknown']), visible: z.boolean(),
+  text: z.string().max(500), visible: z.boolean(),
   expiresAt: z.string().datetime({ offset: true }).nullable().refine(v => v === null || Date.parse(v) > Date.now(), '有效期必须晚于当前时间'),
 }).strict();
 const goalFields = z.object({

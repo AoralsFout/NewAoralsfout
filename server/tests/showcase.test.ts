@@ -73,13 +73,22 @@ test('管理员写入拒绝缺失或错误 Origin；退出撤销既有 Cookie', 
 });
 test('状态完整保存、清空、过期与双层可见性；拒绝非法有效期和字段', async () => {
   const put = (body: any) => supertest(app).put('/api/showcase/admin/personal-status').set('Cookie', `nb_token=${token()}`).set('Origin', origin).send(body);
-  assert.equal((await put({ text: '学习中', availability: 'open', visible: true, expiresAt: null })).status, 200);
-  assert.equal((await supertest(app).get('/api/personal-status')).body.data.text, '学习中');
+  const saved = await put({ text: '学习中', visible: true, expiresAt: null });
+  assert.equal(saved.status, 200);
+  assert.equal(Object.hasOwn(saved.body.data, 'availability'), false);
+  const published = await supertest(app).get('/api/personal-status');
+  assert.equal(published.body.data.text, '学习中');
+  assert.equal(Object.hasOwn(published.body.data, 'availability'), false);
+  const managed = await supertest(app).get('/api/showcase/admin/personal-status').set('Cookie', `nb_token=${token()}`);
+  assert.equal(managed.status, 200);
+  assert.equal(Object.hasOwn(managed.body.data, 'availability'), false);
   personal.expiresAt = new Date(Date.now() - 1000); assert.equal((await supertest(app).get('/api/personal-status')).body.data, null);
-  assert.equal((await put({ text: '', availability: 'unknown', visible: true, expiresAt: null })).status, 200);
+  assert.equal((await put({ text: '', visible: true, expiresAt: null })).status, 200);
   modules.find(m => m.id === 'L07').visible = false; assert.equal((await supertest(app).get('/api/personal-status')).body.data, null);
-  assert.equal((await put({ text: '', availability: 'open', visible: true, expiresAt: '2000-01-01T00:00:00Z' })).status, 400);
-  assert.equal((await put({ text: '', availability: 'open', visible: true, expiresAt: null, role: 'admin' })).status, 400);
+  assert.equal((await put({ text: '', visible: true, expiresAt: '2000-01-01T00:00:00Z' })).status, 400);
+  assert.equal((await put({ text: '', visible: true, expiresAt: null, role: 'admin' })).status, 400);
+  // 旧版客户端提交已移除的接单字段时，应按未知字段拒绝。
+  assert.equal((await put({ text: '', visible: true, expiresAt: null, availability: 'open' })).status, 400);
 });
 test('目标默认隐藏，维护进度和归档，过滤后分页，删除返回 204', async () => {
   const create = (body: any) => supertest(app).post('/api/showcase/admin/learning-goals').set('Cookie', `nb_token=${token()}`).set('Origin', origin).send(body);

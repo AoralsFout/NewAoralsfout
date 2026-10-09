@@ -1,6 +1,6 @@
 /** 管理 API 契约；导出用户、内容、分页、模块状态及标准化缓存数据类型。 */
 export interface User { id: number; username: string; role: 'admin' | 'member' }
-export interface PersonalStatus { text: string; availability: 'open' | 'limited' | 'closed' | 'unknown'; visible: boolean; expiresAt: string | null; updatedAt?: string }
+export interface PersonalStatus { text: string; visible: boolean; expiresAt: string | null; updatedAt?: string }
 export interface Goal { id: number; title: string; description: string | null; progress: number | null; status: 'planned' | 'active' | 'paused' | 'completed'; visible: boolean; sortOrder: number }
 export interface Pagination { page: number; limit: number; total: number }
 export interface Envelope<T> { success: boolean; data: T; pagination?: Pagination; meta?: { freshness: string; updatedAt: string | null } }

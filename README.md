@@ -21,7 +21,9 @@ npm run dev
 
 本次联调已准备忽略的 `server/.env`，无需再次覆盖。它复用 NeoBlog 的 MySQL、JWT 和 Natayark OAuth 配置，以及 AboutMe 的 Steam 参数。Bangumi 账号和 GitHub 用户名来自已有项目配置及资料；凭据不会写入仓库。
 
-`db:setup` 只执行 `server/prisma/migrations/202610090001_showcase/migration.sql` 的五张新表建表语句，并幂等初始化 14 个隐藏模块。不执行删表、重置数据库或 NeoBlog 迁移历史操作。共享库不使用 `prisma migrate reset`、`db push` 或本仓库独立的 `migrate deploy` 接管整个数据库；增量 SQL 应纳入实际部署流程。
+`db:setup` 执行 `server/prisma/migrations/202610090001_showcase/migration.sql` 的五张新表建表语句；若当前状态表仍有旧 `availability` 字段，再执行 `202610090002_remove_availability/migration.sql` 删除该字段及其接单数据，保留描述、有效期和可见性。随后幂等初始化 14 个隐藏模块，整个流程支持重复执行。不执行删表、重置数据库或 NeoBlog 迁移历史操作。共享库不使用 `prisma migrate reset`、`db push` 或本仓库独立的 `migrate deploy` 接管整个数据库；增量 SQL 应纳入实际部署流程。
+
+已有数据库升级时，先停止后端，执行 `npm run db:setup` 和 `npm run db:generate -w server`，再构建并启动服务。
 
 ## 关键配置
 
@@ -45,7 +47,7 @@ npm run dev
 
 ## 管理和公开范围
 
-- 当前状态：描述、接单状态、有效期、可见性；过期后整条停止公开。
+- 当前状态：描述、有效期、可见性；过期后整条停止公开。
 - 学习目标：新增、编辑、进度、状态、顺序、单条可见性、分页筛选和确认删除。
 - 数据与 API 状态：来源配置状态、采集结果、新鲜度、更新时间、耗时、脱敏错误、手动刷新及完整缓存查看。
 - 展示设置：模块开关和受支持列表条目的隐藏／恢复。

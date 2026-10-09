@@ -1,4 +1,4 @@
-/** 增量数据库初始化入口；执行可重复的建表 SQL 并初始化固定模块，绝不执行重置或删表。 */
+/** 增量数据库初始化入口；建表、移除旧接单字段并初始化固定模块，支持重复执行，不重置或删表。 */
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import mysql from 'mysql2/promise';
@@ -11,8 +11,16 @@ async function main() {
     // 单条执行，不打开 multipleStatements；SQL 仅来自仓库中的受控迁移文件。
     const sql = await readFile(resolve('prisma/migrations/202610090001_showcase/migration.sql'), 'utf8');
     for (const statement of sql.split(';').map(s => s.trim()).filter(Boolean)) await connection.query(statement);
+    // 保留初始迁移历史；只在旧字段存在时执行后续迁移，兼容首次安装和重复初始化。
+    const [columns] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'personal_status' AND COLUMN_NAME = 'availability'",
+    );
+    if (columns.length > 0) {
+      const migration = await readFile(resolve('prisma/migrations/202610090002_remove_availability/migration.sql'), 'utf8');
+      await connection.query(migration);
+    }
     await initializeModules();
-    console.log('展示站五张表及模块初始化完成');
+    console.log('展示站表结构更新及模块初始化完成');
   } finally { await connection.end(); await prisma.$disconnect(); }
 }
 main().catch(() => { console.error('数据库初始化失败，请检查连接、权限和表结构；未执行删表操作'); process.exitCode = 1; });

@@ -1,4 +1,4 @@
-/// 复用 NeoBlog 数据模型以兼容共享数据库；下方展示站模型仅新增独立表。
+/// 复用 NeoBlog 数据模型以兼容共享数据库；下方展示站模型使用独立表。
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,7 +12,6 @@ datasource db {
 model PersonalStatus {
   id Int @id @default(1)
   text String @db.VarChar(500)
-  availability String @db.VarChar(20)
   visible Boolean @default(false)
   expiresAt DateTime? @db.DateTime(3)
   updatedAt DateTime @updatedAt @db.DateTime(3)
