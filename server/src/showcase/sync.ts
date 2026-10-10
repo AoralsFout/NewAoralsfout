@@ -56,7 +56,9 @@ export async function refresh(requestId: string) {
       const failure = error instanceof UpstreamError ? error : new UpstreamError('error', 'INVALID_UPSTREAM_DATA', '来源数据格式异常，保留最近完整快照');
       const nextAttemptAt = new Date(Date.now() + Math.max(30000, failure.retryMs || module.interval));
       await prisma.$transaction(async tx => {
-        for (const moduleId of ids) await tx.showcaseCache.update({ where: { moduleId }, data: { lastResult: failure.result, lastErrorCode: failure.code, lastErrorMessage: failure.message, upstreamStatus: failure.status ?? null, durationMs: Date.now() - start, nextAttemptAt, ...(failure.privateData ? { blocked: true } : {}) } });
+        // 全量语言含私有数据，确认账号或仓库权限不足后停止公开旧汇总；普通网络失败仍保留可用快照。
+        const blockSnapshot = failure.privateData || (id === 'github.language-stats' && failure.result === 'auth_error');
+        for (const moduleId of ids) await tx.showcaseCache.update({ where: { moduleId }, data: { lastResult: failure.result, lastErrorCode: failure.code, lastErrorMessage: failure.message, upstreamStatus: failure.status ?? null, durationMs: Date.now() - start, nextAttemptAt, ...(blockSnapshot ? { blocked: true } : {}) } });
         // 用户整体资料隐藏或消失时，立即停止同一账号的旧快照公开，不等待各自的下一次定时采集。
         if (failure.privateData && ['steam.profile', 'steam.status', 'github.profile', 'github.activity', 'github.pinned', 'github.repositories'].includes(id)) {
           for (const moduleId of sourceIds.filter(s => s !== id)) {

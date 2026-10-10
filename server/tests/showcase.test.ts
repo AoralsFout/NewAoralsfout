@@ -1,4 +1,4 @@
-/** 展示站集成验收；使用内存数据库替身和可控上游验证 HTTP 鉴权、过滤、完整仓库分页、同步与错误，不改共享业务数据。 */
+/** 展示站集成验收；使用内存数据库替身和可控上游验证 HTTP 鉴权、完整仓库分页、私有语言汇总、过滤及同步，不改共享业务数据。 */
 import { before, beforeEach, afterEach, after, test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import supertest from 'supertest';
@@ -151,6 +151,113 @@ test('仓库列表确认账号不存在时停止公开同源快照，其他 GitH
   caches.clear(); caches.set('github.repositories', initialCache('github.repositories', [{ itemId: '1', name: '旧仓库' }]));
   await assert.rejects(refresh('github.profile'));
   assert.equal(caches.get('github.repositories').blocked, true);
+});
+
+test('全量语言统计取齐公开及私有仓库，按字节汇总且公开和管理响应均不包含私有仓库标识', async () => {
+  const privateName = 'private-project-do-not-leak', pages: number[] = [];
+  let languageRequests = 0, active = 0, maxActive = 0;
+  mock.method(globalThis, 'fetch', async (url: string, options: RequestInit) => {
+    const parsed = new URL(url);
+    assert.equal(new Headers(options.headers).get('Authorization'), 'Bearer fixture-token');
+    if (parsed.pathname === '/user') return new Response(JSON.stringify({ login: 'FIXTURE', public_repos: 100, owned_private_repos: 1 }));
+    if (parsed.pathname === '/user/repos') {
+      const page = Number(parsed.searchParams.get('page')); pages.push(page);
+      assert.equal(parsed.searchParams.get('visibility'), 'all'); assert.equal(parsed.searchParams.get('affiliation'), 'owner');
+      const data = page === 1 ? Array.from({ length: 100 }, (_, i) => ({ ...repository(i + 1), owner: { login: 'fixture' } })) : [{ id: 101, name: privateName, private: true, owner: { login: 'fixture' }, fork: true, archived: true }];
+      return new Response(JSON.stringify(data));
+    }
+    languageRequests++; active++; maxActive = Math.max(maxActive, active);
+    await new Promise(resolve => setImmediate(resolve)); active--;
+    assert.ok(parsed.pathname.startsWith('/repos/fixture/'));
+    const languages = parsed.pathname.includes(privateName) ? { TypeScript: 50, Python: 100 } : parsed.pathname.endsWith('/repo-1/languages') ? { TypeScript: 100, JavaScript: 50, EmptyLanguage: 0 } : {};
+    return new Response(JSON.stringify(languages));
+  });
+  const response = await supertest(app).post('/api/showcase/admin/modules/github.language-stats/refresh').set('Cookie', `nb_token=${token()}`).set('Origin', origin).send({});
+  assert.equal(response.status, 200); assert.deepEqual(pages, [1, 2]); assert.equal(languageRequests, 101); assert.equal(maxActive, 4);
+  const expected = { repositoryCount: 101, repositoriesWithLanguages: 2, totalBytes: 300, languages: [{ name: 'TypeScript', bytes: 150, repositoryCount: 2, percentage: 50 }, { name: 'Python', bytes: 100, repositoryCount: 1, percentage: 33.33 }, { name: 'JavaScript', bytes: 50, repositoryCount: 1, percentage: 16.67 }] };
+  assert.deepEqual(caches.get('github.language-stats').payload, expected);
+  assert.equal(JSON.stringify(caches.get('github.language-stats')).includes(privateName), false);
+  const publicResponse = await supertest(app).get('/api/showcase/modules/github.language-stats/data');
+  assert.equal(publicResponse.status, 200); assert.deepEqual(publicResponse.body.data, expected); assert.equal(publicResponse.body.pagination, undefined);
+  assert.equal(publicResponse.body.meta.freshness, 'fresh'); assert.equal(publicResponse.text.includes('fixture-token'), false);
+  const managed = await supertest(app).get('/api/showcase/admin/modules/github.language-stats/data').set('Cookie', `nb_token=${token()}`);
+  assert.deepEqual(managed.body.data, expected); assert.equal(managed.text.includes(privateName), false);
+  assert.equal((await supertest(app).get('/api/showcase/modules/github.language-stats/data?category=watched')).status, 400);
+  assert.equal((await supertest(app).put('/api/showcase/admin/modules/github.language-stats/items/101/visibility').set('Cookie', `nb_token=${token()}`).set('Origin', origin).send({ visible: false })).status, 400);
+  modules.find(m => m.id === 'github.language-stats').visible = false;
+  assert.equal((await supertest(app).get('/api/showcase/modules/github.language-stats/data')).status, 404);
+});
+
+test('全量语言网络失败保留旧汇总，私有仓库 404 或权限失效停止公开旧汇总且不影响公开仓库模块', async () => {
+  const payload = { repositoryCount: 1, repositoriesWithLanguages: 1, totalBytes: 5, languages: [{ name: 'TypeScript', bytes: 5, percentage: 100, repositoryCount: 1 }] };
+  const cache = initialCache('github.language-stats', payload); caches.set('github.language-stats', cache);
+  caches.set('github.repositories', initialCache('github.repositories', [{ itemId: '1', name: '公开' }]));
+  const successAt = cache.lastSuccessAt;
+  let failStatus = 0;
+  mock.method(globalThis, 'fetch', async (url: string) => {
+    const path = new URL(url).pathname;
+    if (path === '/user') return new Response(JSON.stringify({ login: 'fixture', public_repos: 0, owned_private_repos: 1 }));
+    if (path === '/user/repos') return new Response(JSON.stringify([{ id: 1, name: 'private-project', private: true, owner: { login: 'fixture' } }]));
+    if (!failStatus) throw new Error('网络失败不能包含私有名称或 secret-token');
+    return new Response('{}', { status: failStatus });
+  });
+  for (const status of [0, 404, 403]) {
+    failStatus = status; cache.nextAttemptAt = null; cache.lastAttemptAt = null; cache.blocked = false;
+    await assert.rejects(refresh('github.language-stats'), (e: any) => e.status === 502);
+    assert.equal(cache.payload, payload); assert.equal(cache.lastSuccessAt, successAt); assert.equal(cache.blocked, status !== 0);
+    assert.equal((await supertest(app).get('/api/showcase/modules/github.language-stats/data')).status, status ? 503 : 200);
+    assert.equal((await supertest(app).get('/api/showcase/modules/github.repositories/data')).status, 200);
+    assert.equal(cache.lastErrorMessage.includes('secret-token'), false); assert.equal(cache.lastErrorMessage.includes('private-project'), false);
+  }
+});
+
+test('全量语言拒绝错账号、缺少私有计数或不完整权限；移除 Token 后旧汇总也不可公开', async () => {
+  const cache = initialCache('github.language-stats', { repositoryCount: 0, repositoriesWithLanguages: 0, totalBytes: 0, languages: [] }); caches.set('github.language-stats', cache);
+  for (const [user, code] of [
+    [{ login: 'another', public_repos: 0, owned_private_repos: 0 }, 'GITHUB_ACCOUNT_MISMATCH'],
+    [{ login: 'fixture', public_repos: 0 }, 'GITHUB_SCOPE_UNVERIFIED'],
+    [{ login: 'fixture', public_repos: 0, owned_private_repos: 1 }, 'GITHUB_REPOSITORIES_INCOMPLETE'],
+  ] as const) {
+    cache.nextAttemptAt = null; cache.lastAttemptAt = null; cache.blocked = false;
+    mock.method(globalThis, 'fetch', async (url: string) => new Response(JSON.stringify(new URL(url).pathname === '/user' ? user : [])));
+    await assert.rejects(refresh('github.language-stats'), (e: any) => e.code === code);
+    assert.equal(cache.blocked, true);
+  }
+  env.githubToken = ''; cache.blocked = false; cache.nextAttemptAt = null; cache.lastAttemptAt = null;
+  await assert.rejects(refresh('github.language-stats'), (e: any) => e.status === 503 && e.code === 'SOURCE_UNCONFIGURED');
+  assert.equal((await supertest(app).get('/api/showcase/modules/github.language-stats/data')).status, 503);
+  assert.equal((await supertest(app).get('/api/showcase/modules')).body.data.find((m: any) => m.id === 'github.language-stats').available, false);
+});
+
+test('全量语言重复分页、仓库总量变化或外部所有者均拒绝部分统计', async () => {
+  const payload = { repositoryCount: 0, repositoriesWithLanguages: 0, totalBytes: 0, languages: [] }, cache = initialCache('github.language-stats', payload); caches.set('github.language-stats', cache);
+  for (const mode of ['duplicate', 'changed', 'external']) {
+    cache.nextAttemptAt = null; cache.lastAttemptAt = null;
+    let userCalls = 0;
+    mock.method(globalThis, 'fetch', async (url: string) => {
+      const parsed = new URL(url);
+      if (parsed.pathname === '/user') return new Response(JSON.stringify({ login: 'fixture', public_repos: mode === 'changed' && ++userCalls === 2 ? 2 : 1, owned_private_repos: 0 }));
+      return new Response(JSON.stringify([{ id: 1, name: 'repo', private: false, owner: { login: mode === 'external' ? 'organization' : 'fixture' } }]), { headers: mode === 'duplicate' ? { Link: '<https://api.github.com/user/repos?page=2>; rel="next"' } : {} });
+    });
+    const code = mode === 'duplicate' ? 'INCOMPLETE_DATA' : mode === 'changed' ? 'REPOSITORIES_CHANGED' : 'INVALID_REPOSITORY_OWNER';
+    await assert.rejects(refresh('github.language-stats'), (e: any) => e.code === code);
+    assert.equal(cache.payload, payload);
+  }
+});
+
+test('全量语言空语言和空仓库均是有效零统计，成功采集覆盖旧汇总', async () => {
+  caches.set('github.language-stats', initialCache('github.language-stats', { totalBytes: 999, languages: [{ name: '旧语言', bytes: 999 }] }));
+  let repoCount = 1;
+  mock.method(globalThis, 'fetch', async (url: string) => {
+    const path = new URL(url).pathname;
+    return new Response(JSON.stringify(path === '/user' ? { login: 'fixture', public_repos: 0, owned_private_repos: repoCount } : path === '/user/repos' ? (repoCount ? [{ id: 1, name: 'empty-private', private: true, owner: { login: 'fixture' } }] : []) : {}));
+  });
+  for (const count of [1, 0]) {
+    repoCount = count; const cache = caches.get('github.language-stats'); cache.nextAttemptAt = null; cache.lastAttemptAt = null;
+    await refresh('github.language-stats');
+    const response = await supertest(app).get('/api/showcase/modules/github.language-stats/data');
+    assert.equal(response.status, 200); assert.deepEqual(response.body.data, { repositoryCount: count, repositoriesWithLanguages: 0, totalBytes: 0, languages: [] });
+  }
 });
 test('未登录 401，普通成员 403；数据库最新角色、禁用状态和令牌版本立即生效', async () => {
   assert.equal((await supertest(app).get('/api/showcase/admin/modules')).status, 401);

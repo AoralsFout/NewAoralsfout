@@ -13,6 +13,7 @@ export const modules = [
   { id: 'github.pinned', name: 'GitHub 置顶仓库', source: 'github', interval: 6 * hour, list: true, items: true },
   { id: 'github.repositories', name: 'GitHub 全部公开仓库', source: 'github', interval: 6 * hour, list: true, items: true },
   { id: 'github.languages', name: '置顶仓库语言构成', source: 'github', interval: 24 * hour, list: true, items: false, parent: 'github.pinned' },
+  { id: 'github.language-stats', name: '全部仓库语言统计（含私有）', source: 'github', interval: 24 * hour, list: false, items: false },
   { id: 'neoblog.articles', name: 'NeoBlog 文章', source: 'neoblog', interval: 15 * minute, list: true, items: true },
   { id: 'neoblog.tags', name: 'NeoBlog 标签', source: 'neoblog', interval: 15 * minute, list: true, items: false, parent: 'neoblog.articles' },
   { id: 'neoblog.archive', name: 'NeoBlog 归档', source: 'neoblog', interval: 15 * minute, list: true, items: false, parent: 'neoblog.articles' },
@@ -28,7 +29,7 @@ export function parentOf(id: string): string | undefined {
 export function configured(id: string): boolean {
   if (id.startsWith('steam.')) return Boolean(env.steamKey && env.steamId);
   if (id.startsWith('bangumi.')) return Boolean(env.bangumiUsername);
-  if (id.startsWith('github.')) return Boolean(env.githubUsername && (!['github.pinned', 'github.contributions', 'github.languages'].includes(id) || env.githubToken));
+  if (id.startsWith('github.')) return Boolean(env.githubUsername && (!['github.pinned', 'github.contributions', 'github.languages', 'github.language-stats'].includes(id) || env.githubToken));
   if (id.startsWith('neoblog.')) return Boolean(env.blogUrl && env.blogAssetUrl);
   return true;
 }

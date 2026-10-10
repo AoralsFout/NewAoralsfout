@@ -24,7 +24,7 @@ npm run dev
 
 本次联调已准备忽略的 `server/.env`，无需再次覆盖。它复用 NeoBlog 的 MySQL、JWT 和 Natayark OAuth 配置，以及 AboutMe 的 Steam 参数。Bangumi 账号和 GitHub 用户名来自已有项目配置及资料；凭据不会写入仓库。
 
-`db:setup` 执行 `server/prisma/migrations/202610090001_showcase/migration.sql` 的五张新表建表语句；若当前状态表仍有旧 `availability` 字段，再执行 `202610090002_remove_availability/migration.sql` 删除该字段及其接单数据，保留描述、有效期和可见性。随后幂等初始化 15 个模块，新模块默认隐藏，已有开关保持原值，整个流程支持重复执行。不执行删表、重置数据库或 NeoBlog 迁移历史操作。共享库不使用 `prisma migrate reset`、`db push` 或本仓库独立的 `migrate deploy` 接管整个数据库；增量 SQL 应纳入实际部署流程。
+`db:setup` 执行 `server/prisma/migrations/202610090001_showcase/migration.sql` 的五张新表建表语句；若当前状态表仍有旧 `availability` 字段，再执行 `202610090002_remove_availability/migration.sql` 删除该字段及其接单数据，保留描述、有效期和可见性。随后幂等初始化 16 个模块，新模块默认隐藏，已有开关保持原值，整个流程支持重复执行。不执行删表、重置数据库或 NeoBlog 迁移历史操作。共享库不使用 `prisma migrate reset`、`db push` 或本仓库独立的 `migrate deploy` 接管整个数据库；增量 SQL 应纳入实际部署流程。
 
 已有数据库升级时，先停止后端，执行 `npm run db:setup` 和 `npm run db:generate -w server`，再构建并启动服务。
 
@@ -42,7 +42,7 @@ npm run dev
 | `STEAM_API_KEY`、`STEAM_ID`                 | Steam 名片、状态及完整游戏库                                                 |
 | `BANGUMI_USERNAME`                          | 动画五类收藏，完整分页后按本人评分排序                                       |
 | `GITHUB_USERNAME`                           | GitHub 名片、最近公开活动与全部公开仓库                                     |
-| `GITHUB_TOKEN`                              | 贡献日历、置顶项目及其语言数据所需 GraphQL 凭据，仅在服务端保存              |
+| `GITHUB_TOKEN`                              | 贡献日历、置顶项目及语言统计所需服务端凭据；全量语言统计还需读取全部私有仓库及账号私有仓库数量 |
 | `NEOBLOG_FRONTEND_URL`、`NEOBLOG_ASSET_URL` | 原文及图片地址；原文路由按已核对的 `/article/:id` 生成                       |
 | `SYNC_ENABLED`                              | 默认 `true`；关闭时仍可手动刷新，适合独立联调                                |
 
@@ -60,6 +60,10 @@ npm run dev
 公开读取不会触发上游采集，且使用 `Cache-Control: no-store`。模块默认关闭；本地状态和目标也需自己的可见性允许。列表先隐藏过滤再统计和分页；管理员登录后访问公开 API 仍遵循公开规则。
 
 公开接口为 `/api/showcase/modules`、`/api/showcase/modules/:moduleId/data`、`/api/personal-status` 和 `/api/learning-goals`；管理接口以 `/api/showcase/admin` 为前缀，内容契约见原后端设计文档。
+
+全部仓库语言统计入口为 `GET /api/showcase/modules/github.language-stats/data`，默认每 24 小时同步。它统计配置账号名下全部公开和私有仓库，含 Fork、归档和空仓库；返回总仓库数、具有语言数据的仓库数、代码总字节及各语言的字节数、占比和涉及仓库数。缓存、公开及管理接口都只保存或返回汇总，不返回私有仓库名称、地址或逐仓库明细。汇总独立于公开仓库、置顶仓库模块的单条隐藏设置。
+
+新增模块无需表结构迁移，重启后端即可注册，默认隐藏；在管理页开启并刷新 `github.language-stats` 后才能公开读取。`GITHUB_TOKEN` 必须属于 `GITHUB_USERNAME` 对应账号。使用 classic PAT 时需要 `repo` 与 `read:user` 权限；使用 fine-grained PAT 时需覆盖该账号全部仓库并具有 Metadata 读取权限，且 `/user` 必须返回 `owned_private_repos` 以验证私有仓库总量。身份不符、缺少计数或实际读取数量不足时采集失败，不发布仅公开仓库的部分统计。确认权限不足或移除 Token 后停止公开旧汇总。
 
 ## 实现调整
 
@@ -82,7 +86,7 @@ npm exec -w server -- tsx scripts/verify-runtime.ts
 
 HTTP 集成测试使用内存数据库替身和可控上游，覆盖权限、会话撤销、Origin、状态有效期、目标 CRUD、分页校验、字段白名单、关联隐藏、快照保留、成功空结果、隐私撤回、限流、同步重入、Bangumi 全分页及 GitHub ETag。根构建依次检查并构建后端、管理页和展示页；只构建展示页使用 `npm run build -w showcase`。
 
-HTTP 集成验收覆盖 GitHub GraphQL 数据映射、全部公开仓库完整分页、父快照并发变化和已确认的账号／仓库隐私撤回。展示前端接入时，按用户授权在管理页开启 14 个现有模块；保留条目级隐藏规则，没有触发上游采集。新部署及后来新增的模块初始化仍默认关闭。
+HTTP 集成验收覆盖 GitHub GraphQL 数据映射、全部公开仓库完整分页、公开与私有仓库语言汇总、Token 身份和数量校验、父快照并发变化和已确认的账号／仓库隐私撤回。展示前端接入时，按用户授权在管理页开启 14 个现有模块；保留条目级隐藏规则，没有触发上游采集。新部署及后来新增的模块初始化仍默认关闭。
 
 本次真实联调已验证 MySQL、管理员 OAuth、四页操作、手动刷新和条目隐藏对公开数量的即时影响。展示页现从公开 API 读到 NeoBlog 2 篇文章、Steam 48 个游戏、Bangumi「看过」405 条、GitHub 5 个置顶项目、1241 次贡献及 300 条公开活动；Bangumi 五类缓存共 468 条，各分类总量分别由接口提供。这些数量是联调时快照，不作为固定验收值。Steam 当前状态暂不可用，个人状态与学习目标为空时不会补示例。
 

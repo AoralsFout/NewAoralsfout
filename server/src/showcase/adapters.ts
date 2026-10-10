@@ -1,4 +1,4 @@
-/** 来源适配器；继承 AboutMe 字段映射和 NeoBlog 文章投影，完整采集仓库等来源后由 collect 输出白名单快照。 */
+/** 来源适配器；继承 AboutMe 字段映射和 NeoBlog 文章投影，由 collect 输出完整快照；私有仓库语言仅输出汇总。 */
 import { z } from 'zod';
 import { env } from '../../config/env';
 import prisma from '../../config/database';
@@ -125,9 +125,66 @@ async function githubRepositoriesSnapshot(signal: AbortSignal): Promise<Snapshot
   payload.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.id - b.id);
   return { payload };
 }
+/** 校验 Token 属于配置账号，并取得公开与私有仓库总量；缺少私有计数时不能声称统计了全部仓库。 */
+async function githubOwnerCounts(signal: AbortSignal) {
+  const { data: user } = await request('https://api.github.com/user', signal, { headers: githubHeaders() });
+  if (z.string().parse(user.login).toLowerCase() !== env.githubUsername.toLowerCase()) throw new UpstreamError('auth_error', 'GITHUB_ACCOUNT_MISMATCH', 'GitHub Token 所属账号与配置不一致');
+  if (user.owned_private_repos === undefined) throw new UpstreamError('auth_error', 'GITHUB_SCOPE_UNVERIFIED', '无法校验私有仓库总量，请配置可读取完整仓库和私有账号资料的 Token');
+  return { publicCount: integer.parse(user.public_repos), privateCount: integer.parse(user.owned_private_repos) };
+}
+/** 汇总本人公开及私有仓库语言字节；仓库标识只在采集期间使用，任何分页或语言请求失败均不发布部分统计。 */
+async function githubLanguageStatsSnapshot(signal: AbortSignal): Promise<Snapshot> {
+  const expected = await githubOwnerCounts(signal), repos: { name: string; private: boolean }[] = [], seen = new Set<number>();
+  for (let page = 1; ; page++) {
+    const result = await request(`https://api.github.com/user/repos?visibility=all&affiliation=owner&sort=full_name&direction=asc&per_page=100&page=${page}`, signal, { headers: githubHeaders() });
+    const items = z.array(object).max(100).parse(result.data);
+    for (const repo of items) {
+      const repoId = integer.parse(repo.id);
+      if (seen.has(repoId)) throw new UpstreamError('error', 'INCOMPLETE_DATA', '仓库分页出现重复条目，请稍后重试');
+      seen.add(repoId);
+      // 再次核对所有者；不把组织或协作仓库计入本人统计，也不采用上游提供的请求 URL。
+      if (z.string().parse(repo.owner?.login).toLowerCase() !== env.githubUsername.toLowerCase()) throw new UpstreamError('error', 'INVALID_REPOSITORY_OWNER', '仓库响应含非配置账号的条目');
+      repos.push({ name: z.string().parse(repo.name), private: z.boolean().parse(repo.private) });
+    }
+    const link = result.headers.get('link');
+    const hasNext = link !== null ? /<[^>]+>;\s*rel="next"/.test(link) : items.length === 100;
+    if (!hasNext) break;
+    if (!items.length) throw new UpstreamError('error', 'INCOMPLETE_DATA', '仓库分页为空但仍有下一页');
+  }
+  const actualPrivate = repos.filter(r => r.private).length, latest = await githubOwnerCounts(signal);
+  if (latest.publicCount !== expected.publicCount || latest.privateCount !== expected.privateCount) throw new UpstreamError('error', 'REPOSITORIES_CHANGED', '仓库总量在采集期间变化，请稍后重试');
+  if (actualPrivate !== expected.privateCount || repos.length - actualPrivate !== expected.publicCount) throw new UpstreamError('auth_error', 'GITHUB_REPOSITORIES_INCOMPLETE', '仓库数量不完整，请检查 Token 是否可读取全部公开及私有仓库');
+  const totals = new Map<string, { bytes: number; repositoryCount: number }>();
+  let repositoriesWithLanguages = 0;
+  // 每批最多四个请求，所有请求结束后才处理结果；失败不跳过仓库，避免把部分数据作为全量结果。
+  for (let offset = 0; offset < repos.length; offset += 4) {
+    const results = await Promise.allSettled(repos.slice(offset, offset + 4).map(async repo => {
+      const url = `https://api.github.com/repos/${encodeURIComponent(env.githubUsername)}/${encodeURIComponent(repo.name)}/languages`;
+      return z.record(integer.safe()).parse((await request(url, signal, { headers: githubHeaders() }, true)).data);
+    }));
+    const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+    // 同批可能同时发生网络与权限错误，优先保留已确认的权限撤回，避免公开旧私有统计。
+    const restricted = failures.find(result => result.reason instanceof UpstreamError && (result.reason.privateData || result.reason.result === 'auth_error'));
+    if (failures.length) throw (restricted || failures[0]).reason;
+    for (const result of results) {
+      if (result.status !== 'fulfilled') continue;
+      const entries = Object.entries(result.value).filter(([, bytes]) => bytes > 0);
+      if (entries.length) repositoriesWithLanguages++;
+      for (const [name, bytes] of entries) {
+        const current = totals.get(name) || { bytes: 0, repositoryCount: 0 };
+        totals.set(name, { bytes: integer.safe().parse(current.bytes + bytes), repositoryCount: current.repositoryCount + 1 });
+      }
+    }
+  }
+  const totalBytes = integer.safe().parse([...totals.values()].reduce((sum, language) => sum + language.bytes, 0));
+  const languages = [...totals].map(([name, value]) => ({ name, ...value, percentage: totalBytes ? Math.round(value.bytes / totalBytes * 10000) / 100 : 0 }));
+  languages.sort((a, b) => b.bytes - a.bytes || a.name.localeCompare(b.name));
+  return { payload: { repositoryCount: repos.length, repositoriesWithLanguages, totalBytes, languages } };
+}
 async function githubSnapshot(id: string, signal: AbortSignal, etag?: string | null): Promise<Snapshot> {
   const login = encodeURIComponent(env.githubUsername);
   if (id === 'github.repositories') return githubRepositoriesSnapshot(signal);
+  if (id === 'github.language-stats') return githubLanguageStatsSnapshot(signal);
   if (id === 'github.contributions') {
     const user = await graphql('query($login:String!){ user(login:$login){ contributionsCollection { contributionCalendar { totalContributions weeks { contributionDays { date contributionCount color } } } } } }', signal);
     const calendar = z.object({ totalContributions: integer, weeks: z.array(z.object({ contributionDays: z.array(z.object({ date: z.string(), contributionCount: integer, color: z.string() })) })) }).parse(user.contributionsCollection?.contributionCalendar);
