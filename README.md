@@ -1,7 +1,8 @@
 <!-- 项目运行说明：记录架构、启动步骤、配置、验证结果和部署职责，不包含凭据或调查内容。 -->
+
 # AoralsFout 展示站
 
-后端位于 `server/`，独立于 NeoBlog 进程运行，连接同一 MySQL 数据库。管理页面位于 `management/`，采用 Vue、Pinia 和简单表单、列表；`showcase/` 暂未开发。本期提供公开展示 API 和四个管理页面。
+后端位于 `server/`，独立于 NeoBlog 进程运行，连接同一 MySQL 数据库。管理页面位于 `management/`，采用 Vue、Pinia 和简单表单、列表；个人展示页面位于 `showcase/`，采用 Vue、GSAP 和 Three.js，默认通过公开 API 展示真实内容。项目提供公开展示 API、四个管理页面和个人展示主页。
 
 ## 本地运行
 
@@ -17,7 +18,9 @@ npm run db:setup
 npm run dev
 ```
 
-管理页面：`http://localhost:5174`；后端：`http://localhost:3002`。请使用 `localhost` 访问管理页面，以匹配默认的 Origin 配置。端口固定，已被占用时会报错。后台接口经 Vite `/api` 代理同源访问。
+展示页面：`http://localhost:5173`；管理页面：`http://localhost:5174`；后端：`http://localhost:3002`。请使用 `localhost` 访问管理页面，以匹配默认的 Origin 配置。端口固定，已被占用时会报错。两个前端的接口均经 Vite `/api` 代理同源访问。
+
+单独运行展示页面时执行 `npm run dev -w showcase`，默认从 `http://localhost:3002` 的公开 API 获取 GitHub 项目与动态、NeoBlog 文章、Steam 游戏库、Bangumi 五类收藏及已有个人记录。API 隐藏、不可用、失败和成功空结果均不会补入 mock；离线设计预览须显式设置 `VITE_SHOWCASE_DATA_MODE=mock`。联系方式通过前端环境变量配置。详细说明见 [showcase/README.md](showcase/README.md)。
 
 本次联调已准备忽略的 `server/.env`，无需再次覆盖。它复用 NeoBlog 的 MySQL、JWT 和 Natayark OAuth 配置，以及 AboutMe 的 Steam 参数。Bangumi 账号和 GitHub 用户名来自已有项目配置及资料；凭据不会写入仓库。
 
@@ -27,21 +30,21 @@ npm run dev
 
 ## 关键配置
 
-| 配置 | 说明 |
-| --- | --- |
-| `DATABASE_URL` | NeoBlog 同一数据库，管理员和文章沿用已有记录 |
-| `JWT_SECRET` | 与 NeoBlog 一致，至少 32 字符；Cookie 名为 `nb_token` |
-| `CLIENT_ID`、`CLIENT_SECRET` | Natayark OAuth 参数，沿用 NeoBlog 的密钥哈希交换协议 |
-| `FRONTEND_URL` | 管理页面来源，用于写入 Origin 校验及登录成功后的跳转 |
-| `OAUTH_CALLBACK_URL` | 需被 OAuth 应用允许；默认 `http://localhost:5174/api/auth/natayark/callback` |
-| `NODE_ENV` | 生产设为 `production`，Cookie 使用 `Secure`、`HttpOnly`、`SameSite=Lax` |
-| `HOST`、`PORT` | 后端默认仅监听 `127.0.0.1:3002`；容器部署可配置监听地址 |
-| `STEAM_API_KEY`、`STEAM_ID` | Steam 名片、状态及完整游戏库 |
-| `BANGUMI_USERNAME` | 动画五类收藏，完整分页后按本人评分排序 |
-| `GITHUB_USERNAME` | GitHub 名片与最近公开活动 |
-| `GITHUB_TOKEN` | 贡献日历、置顶项目及其语言数据所需 GraphQL 凭据，仅在服务端保存 |
-| `NEOBLOG_FRONTEND_URL`、`NEOBLOG_ASSET_URL` | 原文及图片地址；原文路由按已核对的 `/article/:id` 生成 |
-| `SYNC_ENABLED` | 默认 `true`；关闭时仍可手动刷新，适合独立联调 |
+| 配置                                        | 说明                                                                         |
+| ------------------------------------------- | ---------------------------------------------------------------------------- |
+| `DATABASE_URL`                              | NeoBlog 同一数据库，管理员和文章沿用已有记录                                 |
+| `JWT_SECRET`                                | 与 NeoBlog 一致，至少 32 字符；Cookie 名为 `nb_token`                        |
+| `CLIENT_ID`、`CLIENT_SECRET`                | Natayark OAuth 参数，沿用 NeoBlog 的密钥哈希交换协议                         |
+| `FRONTEND_URL`                              | 管理页面来源，用于写入 Origin 校验及登录成功后的跳转                         |
+| `OAUTH_CALLBACK_URL`                        | 需被 OAuth 应用允许；默认 `http://localhost:5174/api/auth/natayark/callback` |
+| `NODE_ENV`                                  | 生产设为 `production`，Cookie 使用 `Secure`、`HttpOnly`、`SameSite=Lax`      |
+| `HOST`、`PORT`                              | 后端默认仅监听 `127.0.0.1:3002`；容器部署可配置监听地址                      |
+| `STEAM_API_KEY`、`STEAM_ID`                 | Steam 名片、状态及完整游戏库                                                 |
+| `BANGUMI_USERNAME`                          | 动画五类收藏，完整分页后按本人评分排序                                       |
+| `GITHUB_USERNAME`                           | GitHub 名片与最近公开活动                                                    |
+| `GITHUB_TOKEN`                              | 贡献日历、置顶项目及其语言数据所需 GraphQL 凭据，仅在服务端保存              |
+| `NEOBLOG_FRONTEND_URL`、`NEOBLOG_ASSET_URL` | 原文及图片地址；原文路由按已核对的 `/article/:id` 生成                       |
+| `SYNC_ENABLED`                              | 默认 `true`；关闭时仍可手动刷新，适合独立联调                                |
 
 缺少外部参数时，服务及本地内容维护仍可运行；相关模块显示“未配置”。管理员不会看到密钥明文。
 
@@ -77,12 +80,12 @@ npm run build
 npm exec -w server -- tsx scripts/verify-runtime.ts
 ```
 
-HTTP 集成测试使用内存数据库替身和可控上游，覆盖权限、会话撤销、Origin、状态有效期、目标 CRUD、分页校验、字段白名单、关联隐藏、快照保留、成功空结果、隐私撤回、限流、同步重入、Bangumi 全分页及 GitHub ETag。构建同时检查后端和 Vue 类型。
+HTTP 集成测试使用内存数据库替身和可控上游，覆盖权限、会话撤销、Origin、状态有效期、目标 CRUD、分页校验、字段白名单、关联隐藏、快照保留、成功空结果、隐私撤回、限流、同步重入、Bangumi 全分页及 GitHub ETag。根构建依次检查并构建后端、管理页和展示页；只构建展示页使用 `npm run build -w showcase`。
 
-目前 14 项集成验收全部通过，包括 GitHub GraphQL 数据映射、父快照并发变化和已确认的账号／仓库隐私撤回。浏览器验收的隐藏测试记录已清理，模块开关恢复为全部关闭。
+目前 14 项集成验收全部通过，包括 GitHub GraphQL 数据映射、父快照并发变化和已确认的账号／仓库隐私撤回。展示前端接入时，按用户授权在管理页开启 14 个现有模块；保留条目级隐藏规则，没有触发上游采集。新部署初始化仍默认关闭模块。
 
-本次真实联调已验证 MySQL、管理员 OAuth、四页操作、手动刷新和条目隐藏对公开数量的即时影响，并采集到 NeoBlog 2 篇文章、Steam 48 个游戏、Bangumi 468 条收藏和 GitHub 300 条公开活动。这些数量是联调时快照，不作为固定验收值。贡献图、置顶仓库和语言适配器已实现，但真实 GraphQL 联调仍需填写 `GITHUB_TOKEN`。
+本次真实联调已验证 MySQL、管理员 OAuth、四页操作、手动刷新和条目隐藏对公开数量的即时影响。展示页现从公开 API 读到 NeoBlog 2 篇文章、Steam 48 个游戏、Bangumi「看过」405 条、GitHub 5 个置顶项目、1241 次贡献及 300 条公开活动；Bangumi 五类缓存共 468 条，各分类总量分别由接口提供。这些数量是联调时快照，不作为固定验收值。Steam 当前状态暂不可用，个人状态与学习目标为空时不会补示例。
 
-生产先构建，后端执行 `npm run start -w server`，静态服务器提供 `management/dist/` 并为管理路由回退到 `index.html`。同一域名将 `/api` 代理至本服务，保留客户端 Origin，代理等待时间不少于 130 秒；使用 HTTPS 并配置正确的管理来源、OAuth 回调和 Cookie 域。Vite 开发服务器仅用于本地开发。
+生产先构建，后端执行 `npm run start -w server`，静态服务器分别提供 `management/dist/` 和 `showcase/dist/`，并为管理路由回退到 `index.html`。同一域名将 `/api` 代理至本服务，保留客户端 Origin，代理等待时间不少于 130 秒；使用 HTTPS 并配置正确的管理来源、OAuth 回调和 Cookie 域。Vite 开发服务器仅用于本地开发。
 
 调查资料 `docs/research/`、环境文件、依赖、构建产物和临时验收文件均被忽略。

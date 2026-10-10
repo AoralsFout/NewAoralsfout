@@ -1,0 +1,14 @@
+{
+  "$comment": "展示页面 TypeScript 配置：声明浏览器和 Vite 类型环境，并对 Vue 组件、页面数据和构建入口执行严格类型检查。",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "node"],
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue", "vite.config.ts"]
+}

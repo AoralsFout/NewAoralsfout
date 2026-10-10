@@ -1,0 +1,295 @@
+/**
+ * 展区背景纹理样式：在六个展区的隔离图层中绘制网格、点阵与条纹。
+ * 仅作用于 textured-section，使用局部低对比装饰，不占布局或接收交互；无脚本导出。
+ */
+@layer components {
+  /* 隔离层使负层级装饰留在所属展区内，同时保留条目动效与焦点描边的溢出。 */
+  .textured-section {
+    --bg-line: rgb(36 80 255 / 0.075);
+    --bg-dot: rgb(36 80 255 / 0.16);
+    --bg-grid-step: 42px;
+    position: relative;
+    isolation: isolate;
+  }
+
+  .textured-section::before,
+  .textured-section::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  /* 动态点缀放在内容下方的留白处；位置独立于内层漂移，不参与条目入场。 */
+  .hero-pattern-accent,
+  .work-pattern-accent,
+  .offscreen-pattern-accent {
+    --pattern-position: absolute;
+    z-index: -1;
+  }
+
+  .hero-pattern-accent {
+    --pattern-width: 174px;
+    --pattern-height: 132px;
+    bottom: 96px;
+    right: 7%;
+  }
+
+  .work-pattern-accent {
+    --pattern-width: 180px;
+    --pattern-height: 96px;
+    top: 40px;
+    right: var(--gutter);
+  }
+
+  .offscreen-pattern-accent {
+    --pattern-width: 152px;
+    --pattern-height: 100px;
+    top: 38px;
+    right: var(--gutter);
+  }
+
+  /* 首屏的大网格以蓝底为坐标，右上角的细矩阵与主体雕塑呼应。 */
+  .hero.textured-section {
+    --bg-line: rgb(255 255 255 / 0.1);
+    --bg-dot: rgb(255 255 255 / 0.2);
+    --bg-grid-step: 64px;
+  }
+
+  .hero.textured-section::before {
+    inset: 0;
+    background-image:
+      linear-gradient(var(--bg-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--bg-line) 1px, transparent 1px);
+    background-size: var(--bg-grid-step) var(--bg-grid-step);
+    mask-image: linear-gradient(125deg, #000 8%, rgb(0 0 0 / 0.6) 65%, transparent);
+  }
+
+  .hero.textured-section::after {
+    top: 76px;
+    right: 2.5%;
+    width: min(28%, 410px);
+    height: 255px;
+    background-image: radial-gradient(var(--bg-dot) 1px, transparent 1.5px);
+    background-size: 13px 13px;
+    mask-image: linear-gradient(140deg, transparent, #000 75%);
+  }
+
+  /* 项目区只在标题留白及底角露出纹理，避免铺满分页后的长列表。 */
+  .work-section.textured-section::before {
+    top: 0;
+    right: 0;
+    width: min(68%, 920px);
+    height: 530px;
+    background-image:
+      linear-gradient(var(--bg-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--bg-line) 1px, transparent 1px);
+    background-size: var(--bg-grid-step) var(--bg-grid-step);
+    mask-image: linear-gradient(220deg, #000, transparent 74%);
+  }
+
+  .work-section.textured-section::after {
+    bottom: 34px;
+    left: 0;
+    width: min(29%, 360px);
+    height: 170px;
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent 0 8px,
+      var(--bg-line) 8px 9px,
+      transparent 9px 17px
+    );
+    mask-image: linear-gradient(45deg, #000, transparent 85%);
+  }
+
+  /* 文章区用细点阵呈现纸面质感，角落斜纹在灰底上提供方向变化。 */
+  .journal-section.textured-section::before {
+    inset: 0;
+    background-image: radial-gradient(var(--bg-dot) 0.8px, transparent 1.3px);
+    background-size: 22px 22px;
+    mask-image: linear-gradient(#000, rgb(0 0 0 / 0.28) 65%, transparent);
+  }
+
+  .journal-section.textured-section::after {
+    top: 28px;
+    right: 0;
+    width: min(24%, 270px);
+    height: 155px;
+    background-image: repeating-linear-gradient(
+      135deg,
+      transparent 0 6px,
+      var(--bg-line) 6px 7px,
+      transparent 7px 13px
+    );
+    mask-image: linear-gradient(220deg, #000, transparent 90%);
+  }
+
+  /* 兴趣区的疏点与密矩阵分居上下角，列表扩展时保持固定装饰面积。 */
+  .offscreen-section.textured-section::before {
+    top: 0;
+    right: 0;
+    width: min(62%, 880px);
+    height: 480px;
+    background-image: radial-gradient(var(--bg-dot) 1px, transparent 1.5px);
+    background-size: 25px 25px;
+    mask-image: linear-gradient(225deg, #000, transparent 74%);
+  }
+
+  .offscreen-section.textured-section::after {
+    right: 0;
+    bottom: 34px;
+    width: min(25%, 300px);
+    height: 200px;
+    background-image:
+      linear-gradient(var(--bg-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--bg-line) 1px, transparent 1px);
+    background-size: 13px 13px;
+    mask-image: linear-gradient(315deg, #000, transparent 85%);
+  }
+
+  /* 个人介绍的网格集中在符号一侧，右侧正文保持更干净的留白。 */
+  .about-section.textured-section::before {
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 48%;
+    background-image:
+      linear-gradient(var(--bg-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--bg-line) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: linear-gradient(90deg, #000, transparent);
+  }
+
+  .about-section.textured-section::after {
+    left: 0;
+    bottom: 25px;
+    width: min(28%, 290px);
+    height: 140px;
+    background-image: radial-gradient(var(--bg-dot) 0.8px, transparent 1.3px);
+    background-size: 12px 12px;
+    mask-image: linear-gradient(45deg, #000, transparent 88%);
+  }
+
+  /* 联系区用斜线收束视觉节奏，较淡的白线不改变链接的对比度。 */
+  .contact-section.textured-section {
+    --bg-line: rgb(255 255 255 / 0.085);
+    --bg-dot: rgb(255 255 255 / 0.16);
+  }
+
+  .contact-section.textured-section::before {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 58%;
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent 0 16px,
+      var(--bg-line) 16px 17px,
+      transparent 17px 34px
+    );
+    mask-image: linear-gradient(90deg, transparent, #000);
+  }
+
+  .contact-section.textured-section::after {
+    right: 2.5%;
+    bottom: 26px;
+    width: min(25%, 270px);
+    height: 135px;
+    background-image: radial-gradient(var(--bg-dot) 0.8px, transparent 1.3px);
+    background-size: 12px 12px;
+    mask-image: linear-gradient(315deg, #000, transparent 85%);
+  }
+
+  /* 窄屏降低纹理密度，并收缩局部面积，避免小字号附近产生视觉噪声。 */
+  @media (max-width: 767px) {
+    .hero-pattern-accent {
+      --pattern-width: 98px;
+      --pattern-height: 78px;
+      right: var(--gutter);
+      bottom: 88px;
+      opacity: 0.7;
+    }
+
+    .work-pattern-accent,
+    .offscreen-pattern-accent {
+      --pattern-width: 92px;
+      --pattern-height: 58px;
+      top: 20px;
+      opacity: 0.6;
+    }
+
+    .textured-section {
+      --bg-line: rgb(36 80 255 / 0.055);
+      --bg-dot: rgb(36 80 255 / 0.12);
+      --bg-grid-step: 48px;
+    }
+
+    .hero.textured-section {
+      --bg-line: rgb(255 255 255 / 0.075);
+      --bg-dot: rgb(255 255 255 / 0.14);
+      --bg-grid-step: 58px;
+    }
+
+    .hero.textured-section::after {
+      top: 45px;
+      width: 36%;
+      height: 155px;
+      background-size: 17px 17px;
+    }
+
+    .work-section.textured-section::before,
+    .offscreen-section.textured-section::before {
+      width: 75%;
+      height: 330px;
+    }
+
+    .work-section.textured-section::after,
+    .offscreen-section.textured-section::after {
+      width: 35%;
+      height: 115px;
+    }
+
+    .journal-section.textured-section::before {
+      background-size: 27px 27px;
+    }
+
+    .journal-section.textured-section::after {
+      width: 33%;
+      height: 100px;
+    }
+
+    .about-section.textured-section::before {
+      width: 58%;
+      background-size: 54px 54px;
+    }
+
+    .about-section.textured-section::after {
+      height: 100px;
+      background-size: 16px 16px;
+    }
+
+    .contact-section.textured-section {
+      --bg-line: rgb(255 255 255 / 0.06);
+      --bg-dot: rgb(255 255 255 / 0.12);
+    }
+
+    .contact-section.textured-section::before {
+      width: 72%;
+    }
+
+    .contact-section.textured-section::after {
+      height: 100px;
+      background-size: 16px 16px;
+    }
+  }
+
+  @media print {
+    .hero-pattern-accent,
+    .work-pattern-accent,
+    .offscreen-pattern-accent,
+    .textured-section::before,
+    .textured-section::after {
+      display: none;
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "$comment": "展示页面依赖与命令配置：提供 Vue 页面开发、严格类型检查、构建及本地预览入口，声明 GSAP 和 Three.js 视觉依赖。",
+  "name": "@aoralsfout/showcase",
+  "private": true,
+  "description": "AoralsFout 个人展示页面：呈现精选作品、近况、文章及兴趣。",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host localhost",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview --host localhost"
+  },
+  "dependencies": {
+    "gsap": "^3.15.0",
+    "three": "^0.186.1",
+    "vue": "^3.5.31"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/three": "^0.186.0",
+    "@vitejs/plugin-vue": "^6.0.5",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.12",
+    "vue-tsc": "^3.2.7"
+  }
+}

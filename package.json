@@ -1,13 +1,13 @@
 {
-  "$comment": "工作区入口配置：声明后端和管理页面，导出安装生成、启动、构建、测试及数据库初始化脚本。",
+  "$comment": "工作区入口配置：声明后端、管理页面和展示页面，导出安装生成、启动、构建、测试及数据库初始化脚本。",
   "name": "aoralsfout",
   "private": true,
-  "description": "展示站工作区：统一启动、构建与验证后端和管理页面。",
-  "workspaces": ["server", "management"],
+  "description": "展示站工作区：统一启动、构建与验证后端、管理页面和展示页面。",
+  "workspaces": ["server", "management", "showcase"],
   "scripts": {
     "postinstall": "npm run db:generate -w server",
-    "dev": "concurrently -n server,management \"npm run dev -w server\" \"npm run dev -w management\"",
-    "build": "npm run build -w server && npm run build -w management",
+    "dev": "concurrently -n server,management,showcase \"npm run dev -w server\" \"npm run dev -w management\" \"npm run dev -w showcase\"",
+    "build": "npm run build -w server && npm run build -w management && npm run build -w showcase",
     "test": "npm run test -w server",
     "db:setup": "npm run db:setup -w server"
   },
