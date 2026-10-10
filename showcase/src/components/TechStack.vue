@@ -1,10 +1,10 @@
 <!--
  * 用途：以全部仓库的语言汇总展示技术栈，不展示逐项目明细。
- * 职责：以彩色横向堆积条和图例呈现语言占比，保留汇总指标、来源状态、零统计与响应式布局。
+ * 职责：以排版树图呈现语言占比（语言名本身即色块，面积按代码字节分配），配合文本图例、汇总指标、来源状态、零统计与响应式布局。
  * 关键导出：TechStack 默认组件，接收 stats、state、emptyMessage，不导出事件。
 -->
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import SourceStatus from "./SourceStatus.vue";
 import type { ShowcaseLanguageStats, ShowcaseModuleState } from "../data/types";
 
@@ -24,6 +24,131 @@ const languages = computed(() => (props.stats?.languages ?? []).map((language, i
   ...language,
   color: languageColors[index] ?? `hsl(${((index - languageColors.length) * 137.508 + 15) % 360} 85% 58%)`,
 })));
+
+type TreemapBox = { x: number; y: number; w: number; h: number };
+type TreemapTile = TreemapBox & {
+  name: string;
+  color: string;
+  ink: boolean;
+  percentage: number;
+  fontSize: number;
+  showName: boolean;
+  showPercentage: boolean;
+};
+
+const treemap = ref<HTMLElement>();
+const size = ref({ width: 0, height: 0 });
+let resizeObserver: ResizeObserver | undefined;
+
+/** 根据背景亮度选择黑字或白字，保证色块上的语言名清晰。 */
+function prefersInk(color: string) {
+  const probe = document.createElement("canvas").getContext("2d");
+  if (!probe) return false;
+  probe.fillStyle = color;
+  const hex = probe.fillStyle;
+  if (!hex.startsWith("#")) return false;
+  const [r, g, b] = [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16) / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.55;
+}
+
+/**
+ * Squarified 树图：按面积从大到小沿短边逐行排布，每行持续加入色块直到最差长宽比变坏再换行，
+ * 让大多数色块接近正方形，便于放下语言名。输入面积需已排序，输出与容器同一像素坐标系。
+ */
+function squarify(areas: number[], width: number, height: number): TreemapBox[] {
+  const boxes: TreemapBox[] = [];
+  let x = 0;
+  let y = 0;
+  let w = width;
+  let h = height;
+  let row: number[] = [];
+  const worst = (items: number[], side: number) => {
+    const sum = items.reduce((total, item) => total + item, 0);
+    const max = Math.max(...items);
+    const min = Math.min(...items);
+    return Math.max((side * side * max) / (sum * sum), (sum * sum) / (side * side * min));
+  };
+  const place = (items: number[]) => {
+    const sum = items.reduce((total, item) => total + item, 0);
+    if (w >= h) {
+      const column = sum / h;
+      let offset = y;
+      items.forEach((item) => {
+        boxes.push({ x, y: offset, w: column, h: item / column });
+        offset += item / column;
+      });
+      x += column;
+      w -= column;
+    } else {
+      const band = sum / w;
+      let offset = x;
+      items.forEach((item) => {
+        boxes.push({ x: offset, y, w: item / band, h: band });
+        offset += item / band;
+      });
+      y += band;
+      h -= band;
+    }
+  };
+  for (const area of areas) {
+    const side = Math.min(w, h);
+    if (!row.length || worst([...row, area], side) <= worst(row, side)) {
+      row.push(area);
+    } else {
+      place(row);
+      row = [area];
+    }
+  }
+  if (row.length) place(row);
+  return boxes;
+}
+
+/** 只有字节数大于零的语言进入树图；零字节语言仍在下方图例中完整列出。 */
+const tiles = computed<TreemapTile[]>(() => {
+  const { width, height } = size.value;
+  const measured = languages.value.filter((language) => language.bytes > 0);
+  const total = measured.reduce((sum, language) => sum + language.bytes, 0);
+  if (!width || !height || !total) return [];
+  const boxes = squarify(
+    measured.map((language) => (language.bytes / total) * width * height),
+    width,
+    height,
+  );
+  return measured.map((language, index) => {
+    const box = boxes[index] ?? { x: 0, y: 0, w: 0, h: 0 };
+    // 字号随色块尺寸变化，同时受语言名长度约束（宽体粗字每字符约 0.8em），确保名称能放进色块。
+    const nameLength = Math.max(Array.from(language.name).length, 2);
+    const fontSize = Math.max(
+      12,
+      Math.min(box.h * 0.36, (box.w - 28) / (nameLength * 0.8), 128),
+    );
+    return {
+      ...box,
+      name: language.name,
+      color: language.color,
+      ink: prefersInk(language.color),
+      percentage: language.percentage,
+      fontSize,
+      showName: box.w > 54 && box.h > 34,
+      showPercentage: box.w > 90 && box.h > 74,
+    };
+  });
+});
+
+// 树图容器只在取得语言数据后渲染，随节点出现或移除重新绑定尺寸观察。
+watch(treemap, (element) => {
+  resizeObserver?.disconnect();
+  if (!element) return;
+  resizeObserver ??= new ResizeObserver(([entry]) => {
+    if (!entry) return;
+    size.value = {
+      width: Math.round(entry.contentRect.width),
+      height: Math.round(entry.contentRect.height),
+    };
+  });
+  resizeObserver.observe(element);
+}, { flush: "post" });
+onUnmounted(() => resizeObserver?.disconnect());
 
 /** 代码量以二进制单位缩写，精确字节数仍通过文本提示提供；零字节保留为 0 B。 */
 function formatBytes(bytes: number) {
@@ -65,15 +190,26 @@ function formatBytes(bytes: number) {
       </div>
     </dl>
     <div v-if="languages.length" class="language-statistics" data-motion-segment>
-      <!-- 按原始字节分配宽度，避免占比舍入留下空隙或丢失微小语言；完整数据由下方文本图例提供。 -->
-      <div class="language-statistics__bar" aria-hidden="true">
+      <!-- 按原始字节分配面积；色块只作视觉呈现，完整数据由下方文本图例提供。 -->
+      <div ref="treemap" class="language-treemap" aria-hidden="true">
         <span
-          v-for="language in languages"
-          :key="language.name"
-          class="language-statistics__segment"
-          :style="{ flexGrow: language.bytes, backgroundColor: language.color }"
-          :title="`${language.name} ${percentageFormatter.format(language.percentage)}%`"
-        ></span>
+          v-for="tile in tiles"
+          :key="tile.name"
+          class="language-treemap__tile"
+          :class="{ 'is-ink': tile.ink }"
+          data-motion-item
+          :style="{
+            left: `${tile.x}px`,
+            top: `${tile.y}px`,
+            width: `${tile.w}px`,
+            height: `${tile.h}px`,
+            backgroundColor: tile.color,
+          }"
+          :title="`${tile.name} ${percentageFormatter.format(tile.percentage)}%`"
+        >
+          <strong v-if="tile.showName" :style="{ fontSize: `${tile.fontSize}px` }">{{ tile.name }}</strong>
+          <span v-if="tile.showPercentage" class="mono">{{ percentageFormatter.format(tile.percentage) }}%</span>
+        </span>
       </div>
       <ul class="language-statistics__legend" aria-label="语言占比图例，按代码量排列">
         <li v-for="language in languages" :key="language.name" class="language-statistics__legend-item">
@@ -110,8 +246,12 @@ function formatBytes(bytes: number) {
 .tech-stack__summary > div + div { border-left: 1px solid var(--line); }
 .tech-stack__summary dt { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
 .tech-stack__summary dd { margin: 0; font-size: clamp(20px, 2.5vw, 30px); font-weight: 700; overflow-wrap: anywhere; }
-.language-statistics__bar { display: flex; height: 18px; overflow: hidden; border-radius: 5px; background: var(--surface); }
-.language-statistics__segment { flex-basis: 0; min-width: 0; }
+/* 树图容器按比例给出画布，色块用 1px 内描边分隔，语言名以超大字号贴在左下角。 */
+.language-treemap { position: relative; aspect-ratio: 2.4; background: var(--ink); overflow: hidden; }
+.language-treemap__tile { position: absolute; display: flex; flex-direction: column; justify-content: space-between; padding: 12px 14px; overflow: hidden; color: var(--white); box-shadow: inset 0 0 0 1px var(--ink); }
+.language-treemap__tile.is-ink { color: var(--ink); }
+.language-treemap__tile strong { order: 2; font-family: var(--display); font-weight: 900; font-stretch: 112%; line-height: 0.9; letter-spacing: -0.05em; white-space: nowrap; }
+.language-treemap__tile .mono { order: 1; font-size: 12px; font-weight: 700; }
 .language-statistics__legend { display: flex; flex-wrap: wrap; gap: 12px 24px; list-style: none; margin: 18px 0 0; padding: 0; }
 .language-statistics__legend-item { display: flex; align-items: baseline; gap: 8px; min-width: 0; max-width: 100%; font-size: 14px; line-height: 1.6; }
 .language-statistics__swatch { flex: 0 0 10px; height: 10px; border-radius: 50%; align-self: baseline; position: relative; top: 1px; }
@@ -129,5 +269,6 @@ function formatBytes(bytes: number) {
   .tech-stack__summary > div:nth-child(3) { border-left: 0; }
   .tech-stack__summary > div:nth-child(n + 3) { border-top: 1px solid var(--line); }
   .language-statistics__legend { gap: 10px 18px; }
+  .language-treemap { aspect-ratio: 1; }
 }
 </style>

@@ -1,4 +1,4 @@
-/** 展示站视觉体系：定义黑白蓝黄语义变量、仓库卡片、贡献日历、文章封面、详情弹窗与响应式排版，无关键导出。 */
+/** 展示站视觉体系：定义黑白蓝黄语义变量与自托管字体栈、悬浮页头、仓库索引、通栏贡献日历、文章网点封面、联系区指针填充、颗粒与栏线叠层、详情弹窗与响应式排版，无关键导出。 */
 @layer reset, base, layout, components, responsive;
 
 @layer reset {
@@ -44,10 +44,12 @@
     --muted: #646464;
     --line: #d8d8d8;
     --surface: #f4f4f4;
+    /* 英文大字用带宽度轴的 Archivo，中文标题回落到 900 字重的 Noto Sans SC；正文中文仍用系统字体，避免整套中文字库下载。 */
     --display:
-      "Arial Black", "Helvetica Neue", Arial, "Microsoft YaHei", sans-serif;
-    --body: Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
-    --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      "Archivo Variable", "Noto Sans SC", "Arial Black", "Microsoft YaHei", sans-serif;
+    --body: "Archivo Variable", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --mono: "JetBrains Mono Variable", "SFMono-Regular", Consolas, monospace;
+    --header-height: 88px;
     --gutter: clamp(24px, 4vw, 72px);
   }
   html {
@@ -87,8 +89,10 @@
     font-weight: 700;
   }
   h2 {
-    letter-spacing: -0.065em;
-    line-height: 1.18;
+    font-family: var(--display);
+    font-weight: 900;
+    letter-spacing: -0.05em;
+    line-height: 1.04;
     text-wrap: balance;
   }
   h3 {
@@ -121,6 +125,14 @@
   .skip-link:focus {
     top: 16px;
   }
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 @layer layout {
@@ -128,22 +140,69 @@
     max-width: 2400px;
     margin: auto;
   }
+  /* 全站叠一层很淡的颗粒和 12 栏细线，统一印刷质感与网格参照；不接收指针，打印时移除。 */
+  .exhibition::before,
+  .exhibition::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    pointer-events: none;
+  }
+  .exhibition::before {
+    left: var(--gutter);
+    right: var(--gutter);
+    background-image: repeating-linear-gradient(
+      90deg,
+      rgb(17 17 17 / 0.035) 0 1px,
+      transparent 1px calc(100% / 12)
+    );
+  }
+  .exhibition::after {
+    opacity: 0.07;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.4 -.35'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  @media print {
+    .exhibition::before,
+    .exhibition::after {
+      display: none;
+    }
+  }
+  /* 页头悬浮在内容之上：压在首屏蓝色舞台时透明反白，离开舞台后恢复白底。 */
   .site-header {
     display: flex;
     align-items: center;
     padding: 0 var(--gutter);
-    height: 88px;
+    height: var(--header-height);
     gap: 32px;
-    position: sticky;
+    position: fixed;
     top: 0;
+    left: 0;
+    right: 0;
+    max-width: 2400px;
+    margin: 0 auto;
     z-index: 20;
+    color: var(--ink);
     background: var(--white);
     border-bottom: 1px solid var(--line);
+    transition:
+      background-color 0.3s,
+      color 0.3s,
+      border-color 0.3s;
+  }
+  .site-header.is-on-stage {
+    color: var(--white);
+    background: transparent;
+    border-bottom-color: rgb(255 255 255 / 0.22);
+  }
+  .site-header.is-on-stage :focus-visible {
+    outline-color: var(--yellow);
   }
   .wordmark {
+    font-family: var(--display);
     font-size: 40px;
     font-weight: 900;
-    letter-spacing: -0.12em;
+    letter-spacing: -0.09em;
     line-height: 1;
     min-width: 60px;
     padding-bottom: 6px;
@@ -151,8 +210,8 @@
   .wordmark-dot {
     color: var(--blue);
   }
-  .header-note {
-    margin-left: 18px;
+  .is-on-stage .wordmark-dot {
+    color: var(--yellow);
   }
   .desktop-nav {
     display: flex;
@@ -170,12 +229,20 @@
   .desktop-nav a:hover {
     color: var(--blue);
   }
+  .is-on-stage .desktop-nav a[aria-current],
+  .is-on-stage .desktop-nav a:hover {
+    color: var(--yellow);
+  }
   .site-header .mobile-toggle,
   .mobile-nav {
     display: none;
   }
   .section-shell {
-    padding: 100px var(--gutter);
+    padding: 120px var(--gutter);
+  }
+  /* 首屏转场末段已铺满白色，代码区紧接着露出章节标签，不留空白滚动距离。 */
+  .work-section.section-shell {
+    padding-top: 48px;
   }
   .section-label {
     display: flex;
@@ -195,10 +262,10 @@
     justify-content: space-between;
     align-items: flex-end;
     gap: 40px;
-    margin: 30px 0 48px;
+    margin: 30px 0 64px;
   }
   .section-title-row h2 {
-    font-size: clamp(38px, 4.2vw, 70px);
+    font-size: clamp(48px, 6.6vw, 124px);
   }
   .section-title-row p {
     color: var(--muted);
@@ -236,150 +303,6 @@
 }
 
 @layer components {
-  /* 蓝色舞台以超大姓名为主角，三维雕塑在字面与留白之间提供局部遮挡。 */
-  .hero {
-    color: var(--white);
-    background: var(--blue);
-    padding: 28px var(--gutter) 0;
-    overflow: clip;
-    position: relative;
-  }
-  .hero-topline {
-    display: flex;
-    justify-content: space-between;
-    font-size: 10px;
-    position: relative;
-    z-index: 5;
-  }
-  .hero-grid {
-    height: clamp(570px, 45vw, 770px);
-    position: relative;
-  }
-  .hero-kicker {
-    position: absolute;
-    top: 38px;
-    left: 2px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 12px;
-  }
-  .small-cross {
-    font-size: 23px;
-    font-weight: 300;
-    line-height: 1;
-  }
-  .hero-name {
-    position: absolute;
-    left: -9px;
-    top: 80px;
-    z-index: 2;
-    font-family: var(--display);
-    font-weight: 900;
-    font-size: clamp(140px, 15.9vw, 335px);
-    line-height: 0.89;
-    letter-spacing: -0.073em;
-  }
-  .hero-name-line {
-    display: block;
-    overflow: clip;
-    padding-right: 18px;
-    padding-bottom: 9px;
-  }
-  .hero-name-line > span {
-    display: block;
-  }
-  .name-period {
-    color: var(--yellow);
-  }
-  .hero-sculpture-stage {
-    position: absolute;
-    right: -20px;
-    top: 3%;
-    width: 48%;
-    height: 65%;
-    z-index: 3;
-  }
-  .sculpture-note {
-    position: absolute;
-    top: 37%;
-    right: -36px;
-    font-size: 9px;
-    writing-mode: vertical-rl;
-  }
-  .hero-intro {
-    position: absolute;
-    right: 6%;
-    bottom: 55px;
-    z-index: 4;
-    width: 330px;
-  }
-  .hero-intro-label {
-    font-size: 9px;
-  }
-  .hero-intro p {
-    font-size: 23px;
-    line-height: 1.65;
-    margin: 12px 0 23px;
-    letter-spacing: -0.025em;
-  }
-  .yellow-underline {
-    text-decoration: underline;
-    text-decoration-color: var(--yellow);
-    text-decoration-thickness: 2px;
-    text-underline-offset: 7px;
-  }
-  .hero-cta {
-    display: inline-flex;
-    gap: 34px;
-    padding: 11px 17px;
-    min-height: 44px;
-    background: var(--yellow);
-    color: var(--ink);
-    font-size: 12px;
-    align-items: center;
-    transition: gap 0.2s;
-  }
-  .hero-cta:hover {
-    gap: 43px;
-  }
-  .hero-coordinate {
-    position: absolute;
-    left: 3px;
-    bottom: 46px;
-    display: flex;
-    flex-direction: column;
-    font-size: 9px;
-    line-height: 1.8;
-  }
-  .hero-bottom {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    min-height: 75px;
-    border-top: 1px solid #ffffff50;
-    font-size: 9px;
-    gap: 20px;
-  }
-  .hero-bottom a {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    min-height: 44px;
-  }
-  .hero-status {
-    display: inline-flex;
-    gap: 9px;
-    align-items: center;
-  }
-  .status-dot {
-    display: inline-block;
-    background: var(--yellow);
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
   /* 仓库直接呈现公开描述、语言和 Star，不使用虚构的项目截图。 */
   .work-toolbar {
     display: flex;
@@ -414,92 +337,100 @@
   .filter-list button > span {
     margin-left: 12px;
   }
-  .repo-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px;
-  }
-  .repo-card {
+  .index-heading {
     display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 265px;
-    padding: 30px;
-    text-align: left;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    transition:
-      border-color 0.2s,
-      background 0.2s;
-  }
-  .repo-card:hover {
-    border-color: var(--blue);
-    background: #edf0ff;
-  }
-  .repo-top,
-  .repo-bottom {
-    display: flex;
-    align-items: center;
+    align-items: baseline;
     justify-content: space-between;
-    gap: 12px;
+    gap: 20px;
+    padding-bottom: 14px;
   }
-  .repo-top {
+  .index-heading h3 {
+    font-family: var(--display);
+    font-size: clamp(28px, 3vw, 44px);
+    font-weight: 900;
+    letter-spacing: -0.05em;
+  }
+  .index-heading .mono {
     color: var(--muted);
   }
+  /* 仓库索引以整行呈现：编号、名称、介绍、语言与 Star 对齐成表，悬停时整行反蓝。 */
+  .repo-grid {
+    display: grid;
+    border-top: 1px solid var(--ink);
+  }
+  .repo-card {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(120px, 0.5fr) 44px;
+    align-items: center;
+    gap: 28px;
+    min-width: 0;
+    padding: 26px 14px;
+    text-align: left;
+    background: transparent;
+    border-bottom: 1px solid var(--line);
+    transition:
+      background 0.25s,
+      color 0.25s,
+      padding 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .repo-card:hover {
+    background: var(--blue);
+    color: var(--white);
+    padding-left: 28px;
+  }
+  .repo-index {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .repo-name {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
   .repo-card h3 {
-    font-size: clamp(26px, 3.1vw, 43px);
-    letter-spacing: -0.055em;
-    margin: 27px 0 12px;
+    font-family: var(--display);
+    font-size: clamp(24px, 2.4vw, 38px);
+    font-weight: 900;
+    font-stretch: 110%;
+    letter-spacing: -0.05em;
+    line-height: 1.05;
+    overflow-wrap: anywhere;
+  }
+  .repo-name > .mono {
+    color: var(--muted);
     overflow-wrap: anywhere;
   }
   .repo-card p {
     color: var(--muted);
     font-size: 13px;
-    line-height: 1.8;
-    max-width: 650px;
+    line-height: 1.75;
   }
-  .repo-bottom {
-    margin-top: auto;
-    padding-top: 26px;
+  .repo-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
   }
-  .repo-bottom > span:first-child {
-    overflow-wrap: anywhere;
-    min-width: 0;
+  .repo-card:hover :is(.repo-index, .repo-name > .mono, p) {
+    color: rgb(255 255 255 / 0.82);
   }
   .repo-open {
-    width: 38px;
-    height: 38px;
+    width: 44px;
+    height: 44px;
     display: grid;
     place-items: center;
     flex-shrink: 0;
-    border-radius: 50%;
-    background: var(--white);
-    color: var(--blue);
-  }
-  .repo-featured {
-    grid-column: 1/-1;
-    background: var(--blue);
+    background: var(--ink);
     color: var(--white);
-    min-height: 285px;
-    border-color: var(--blue);
+    transition:
+      transform 0.25s,
+      background 0.25s;
   }
-  .repo-featured:hover {
-    background: #1b40d9;
-  }
-  .repo-featured .repo-top,
-  .repo-featured p {
-    color: #ffffffe0;
-  }
-  .repo-featured h3 {
-    font-size: clamp(46px, 6vw, 80px);
-    margin: 20px 0 8px;
-  }
-  .repo-featured .repo-open {
+  .repo-card:hover .repo-open {
     background: var(--yellow);
     color: var(--ink);
-  }
-  .repo-featured:focus-visible {
-    outline-offset: 5px;
+    transform: rotate(45deg);
   }
   .load-more {
     min-height: 44px;
@@ -523,9 +454,9 @@
   }
   .code-records {
     display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-    gap: 42px;
-    margin-top: 75px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 72px;
+    margin-top: 90px;
     padding-top: 32px;
     border-top: 1px solid var(--ink);
     align-items: start;
@@ -554,9 +485,12 @@
   .contribution-summary > strong {
     color: var(--blue);
     font-family: var(--display);
-    font-size: clamp(50px, 5vw, 78px);
-    line-height: 1.1;
-    letter-spacing: -0.05em;
+    font-size: clamp(72px, 11vw, 200px);
+    font-weight: 900;
+    font-stretch: 62%;
+    font-variant-numeric: tabular-nums;
+    line-height: 0.9;
+    letter-spacing: -0.04em;
   }
   .contribution-summary > span {
     font-size: 12px;
@@ -572,13 +506,17 @@
     overflow-x: auto;
     padding: 5px 0;
   }
+  /* 宽屏下日历通栏铺满，格子随列宽缩放；窄屏回到固定格并允许横向滚动。 */
   .heatmap {
     display: grid;
-    grid-template-rows: repeat(7, 10px);
+    grid-template-rows: repeat(7, auto);
     grid-auto-flow: column;
-    grid-auto-columns: 10px;
-    gap: 3px;
-    width: max-content;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: clamp(2px, 0.3vw, 5px);
+    width: 100%;
+  }
+  .heatmap > span {
+    aspect-ratio: 1;
   }
   .heatmap > span,
   .heatmap-legend i {
@@ -643,10 +581,14 @@
     white-space: nowrap;
   }
   .activity-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 40px;
     margin-top: 18px;
-    max-height: 360px;
+    max-height: 420px;
     overflow: auto;
     overscroll-behavior: contain;
+    align-content: start;
   }
   .activity-row {
     display: flex;
@@ -721,7 +663,42 @@
     transition: transform 0.4s;
   }
   .article-card:hover .article-cover > img {
-    transform: scale(1.025);
+    transform: scale(1.04);
+  }
+  /* 封面默认蓝白双色网点，悬停或聚焦时还原原图；触屏设备直接显示原图。 */
+  @media (hover: hover) {
+    .article-cover:has(> img) > img {
+      filter: grayscale(1) contrast(1.2) brightness(1.04);
+      transition:
+        filter 0.45s,
+        transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .article-cover:has(> img)::before,
+    .article-cover:has(> img)::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      transition: opacity 0.45s;
+    }
+    .article-cover:has(> img)::before {
+      z-index: 1;
+      background: var(--blue);
+      mix-blend-mode: screen;
+    }
+    .article-cover:has(> img)::after {
+      z-index: 2;
+      background-image: radial-gradient(rgb(17 17 17 / 0.5) 28%, transparent 34%);
+      background-size: 5px 5px;
+      mix-blend-mode: multiply;
+    }
+    .article-card:is(:hover, :focus-visible) .article-cover > img {
+      filter: none;
+    }
+    .article-card:is(:hover, :focus-visible) .article-cover::before,
+    .article-card:is(:hover, :focus-visible) .article-cover::after {
+      opacity: 0;
+    }
   }
   .cover-fallback {
     height: 100%;
@@ -741,6 +718,7 @@
   }
   .article-arrow {
     position: absolute;
+    z-index: 3;
     bottom: 18px;
     right: 18px;
     background: var(--white);
@@ -761,7 +739,9 @@
     color: var(--muted);
   }
   .article-card h3 {
-    font-size: 28px;
+    font-family: var(--display);
+    font-weight: 900;
+    font-size: 30px;
     letter-spacing: -0.045em;
     margin: 17px 0 12px;
   }
@@ -781,27 +761,6 @@
     border: 1px solid var(--line);
     padding: 4px 9px;
     color: var(--muted);
-  }
-  .manifesto {
-    background: var(--yellow);
-    padding: 28px 0;
-    overflow: clip;
-    border-top: 1px solid var(--ink);
-    border-bottom: 1px solid var(--ink);
-  }
-  .manifesto-text {
-    display: flex;
-    align-items: center;
-    gap: 50px;
-    width: max-content;
-    font-family: var(--display);
-    font-size: clamp(50px, 6vw, 94px);
-    font-weight: 900;
-    letter-spacing: -0.045em;
-    line-height: 1;
-  }
-  .manifesto-text > span {
-    color: var(--blue);
   }
   .collection-block {
     border-top: 1px solid var(--ink);
@@ -891,6 +850,8 @@
     align-items: center;
     width: max-content;
     font-family: var(--display);
+    font-weight: 900;
+    font-stretch: 125%;
     font-size: 240px;
     line-height: 1;
     letter-spacing: -0.19em;
@@ -1031,13 +992,37 @@
     padding: 60px 0;
   }
   .contact-main h2 {
-    font-size: clamp(70px, 9vw, 152px);
-    line-height: 1.12;
-    letter-spacing: -0.075em;
+    font-size: clamp(70px, 11vw, 200px);
+    line-height: 1.02;
+    letter-spacing: -0.06em;
   }
+  /*
+   * 描边字：先描边再用底色填充（paint-order），盖住中文字形内部重叠轮廓的描边线，只留外轮廓。
+   * 指针填充放在同字形的叠加层上，背景按视口固定定位，坐标由联系区的 --mx/--my 提供。
+   */
   .contact-outline {
-    -webkit-text-stroke: 1px var(--white);
+    color: var(--blue);
+    -webkit-text-stroke: 3px var(--white);
+    paint-order: stroke fill;
+  }
+  .contact-outline .motion-heading__char {
+    position: relative;
+  }
+  .contact-outline .motion-heading__char::after {
+    content: attr(data-char);
+    position: absolute;
+    inset: 0;
     color: transparent;
+    -webkit-text-stroke: 0;
+    background: radial-gradient(
+      circle at var(--mx, -999px) var(--my, -999px),
+      var(--yellow) 0 clamp(90px, 9vw, 170px),
+      transparent calc(clamp(90px, 9vw, 170px) + 1px)
+    );
+    background-attachment: fixed;
+    -webkit-background-clip: text;
+    background-clip: text;
+    pointer-events: none;
   }
   .contact-orb {
     width: clamp(110px, 15vw, 215px);
@@ -1048,10 +1033,12 @@
     display: grid;
     place-items: center;
     margin-right: 4%;
-    transition: transform 0.3s;
     flex-shrink: 0;
   }
-  .contact-orb:hover {
+  .contact-orb > svg {
+    transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .contact-orb:hover > svg {
     transform: rotate(45deg);
   }
   .contact-links {
@@ -1094,7 +1081,8 @@
     padding: 28px var(--gutter);
   }
   .footer-brand {
-    font-weight: 700;
+    font-family: var(--display);
+    font-weight: 900;
     letter-spacing: -0.055em;
     font-size: 19px;
   }
@@ -1273,49 +1261,15 @@
 }
 
 @layer responsive {
-  @media (min-width: 1800px) {
-    .hero-intro {
-      width: 410px;
-      bottom: 70px;
-    }
-    .hero-intro p {
-      font-size: 29px;
-    }
-    .hero-name {
-      top: 110px;
-    }
-  }
   @media (max-width: 1100px) {
-    .header-note {
-      font-size: 9px;
-      margin-left: 0;
-    }
     .desktop-nav {
       gap: 25px;
     }
-    .hero-name {
-      top: 115px;
+    .repo-card {
+      grid-template-columns: 44px minmax(0, 1fr) minmax(100px, 0.45fr) 44px;
     }
-    .hero-sculpture-stage {
-      top: 7%;
-      height: 68%;
-      right: -38px;
-    }
-    .hero-intro {
-      right: 0;
-      bottom: 43px;
-      width: 270px;
-    }
-    .hero-intro p {
-      font-size: 19px;
-    }
-    .code-records {
-      grid-template-columns: 1fr;
-    }
-    .heatmap {
-      grid-template-rows: repeat(7, 11px);
-      grid-auto-columns: 11px;
-      gap: 4px;
+    .repo-card p {
+      display: none;
     }
     .about-grid,
     .now-content {
@@ -1335,22 +1289,24 @@
   @media (max-width: 767px) {
     :root {
       --gutter: 24px;
+      --header-height: 72px;
     }
     html {
       scroll-padding-top: 72px;
     }
     .site-header {
-      height: 72px;
       gap: 15px;
+    }
+    .exhibition::before {
+      background-image: repeating-linear-gradient(
+        90deg,
+        rgb(17 17 17 / 0.035) 0 1px,
+        transparent 1px calc(100% / 4)
+      );
     }
     .wordmark {
       font-size: 35px;
       min-width: 43px;
-    }
-    .header-note {
-      font-size: 7px;
-      letter-spacing: 0;
-      max-width: 155px;
     }
     .desktop-nav {
       display: none;
@@ -1379,78 +1335,6 @@
       min-height: 60px;
       border-bottom: 1px solid var(--line);
     }
-    .hero {
-      padding-top: 20px;
-    }
-    .hero-topline {
-      font-size: 7px;
-      gap: 20px;
-    }
-    .hero-edition {
-      display: none;
-    }
-    .hero-grid {
-      height: 690px;
-    }
-    .hero-kicker {
-      top: 27px;
-      font-size: 10px;
-      gap: 8px;
-    }
-    .small-cross {
-      font-size: 19px;
-    }
-    .hero-name {
-      top: 89px;
-      left: -4px;
-      font-size: clamp(75px, 18.5vw, 135px);
-      line-height: 0.96;
-    }
-    .hero-name-line {
-      padding-bottom: 4px;
-    }
-    .hero-sculpture-stage {
-      width: 86%;
-      height: 340px;
-      top: 240px;
-      right: -22px;
-    }
-    .sculpture-note {
-      right: 3px;
-      top: 32%;
-      font-size: 7px;
-    }
-    .hero-intro {
-      left: 0;
-      right: auto;
-      width: 100%;
-      bottom: 34px;
-    }
-    .hero-intro-label {
-      font-size: 8px;
-    }
-    .hero-intro p {
-      font-size: 18px;
-      margin: 9px 0 17px;
-    }
-    .hero-coordinate {
-      top: 370px;
-      bottom: auto;
-      left: 0;
-      font-size: 7px;
-      z-index: 4;
-    }
-    .hero-bottom {
-      min-height: 64px;
-      font-size: 7px;
-      gap: 10px;
-    }
-    .hero-bottom > span:last-child {
-      display: none;
-    }
-    .hero-bottom a {
-      gap: 10px;
-    }
     .section-shell {
       padding: 65px var(--gutter);
     }
@@ -1464,7 +1348,7 @@
       gap: 22px;
     }
     .section-title-row h2 {
-      font-size: 40px;
+      font-size: clamp(44px, 13vw, 64px);
     }
     .section-title-row > p {
       width: 100%;
@@ -1486,31 +1370,20 @@
       padding: 9px 12px;
       font-size: 11px;
     }
-    .repo-grid {
-      grid-template-columns: 1fr;
-      gap: 14px;
-    }
     .repo-card {
-      padding: 24px;
-      min-height: 250px;
+      grid-template-columns: 32px minmax(0, 1fr) 40px;
+      gap: 14px;
+      padding: 20px 4px;
     }
-    .repo-card h3 {
-      font-size: 29px;
-      margin-top: 22px;
+    .repo-card:hover {
+      padding-left: 12px;
     }
-    .repo-card p {
-      font-size: 12px;
+    .repo-meta {
+      display: none;
     }
-    .repo-featured {
-      grid-column: auto;
-      min-height: 260px;
-    }
-    .repo-featured h3 {
-      font-size: 56px;
-    }
-    .repo-top,
-    .repo-bottom > .mono {
-      font-size: 10px;
+    .repo-open {
+      width: 40px;
+      height: 40px;
     }
     .code-records {
       margin-top: 45px;
@@ -1524,7 +1397,16 @@
       gap: 18px;
     }
     .contribution-summary strong {
-      font-size: 54px;
+      font-size: 84px;
+    }
+    .heatmap {
+      grid-template-rows: repeat(7, 11px);
+      grid-auto-columns: 11px;
+      gap: 4px;
+      width: max-content;
+    }
+    .activity-list {
+      grid-template-columns: minmax(0, 1fr);
     }
     .contribution-summary small {
       font-size: 9px;
@@ -1556,13 +1438,6 @@
     }
     .cover-fallback strong {
       font-size: 42px;
-    }
-    .manifesto {
-      padding: 20px 0;
-    }
-    .manifesto-text {
-      gap: 30px;
-      font-size: 44px;
     }
     .collection-heading {
       align-items: flex-start;
@@ -1646,7 +1521,7 @@
       gap: 14px;
     }
     .contact-main h2 {
-      font-size: clamp(44px, 9vw, 62px);
+      font-size: clamp(48px, 13vw, 72px);
     }
     .contact-orb {
       width: 84px;
@@ -1714,19 +1589,6 @@
   @media (max-width: 380px) {
     :root {
       --gutter: 20px;
-    }
-    .hero-grid {
-      height: 655px;
-    }
-    .hero-name {
-      font-size: 18vw;
-    }
-    .hero-sculpture-stage {
-      top: 213px;
-      height: 320px;
-    }
-    .hero-coordinate {
-      top: 335px;
     }
     .contact-main h2 {
       font-size: 44px;

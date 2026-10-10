@@ -1,4 +1,4 @@
-<!-- GitHub 贡献日历：呈现真实贡献总量、日期热图和文字明细，完整离开视口后可重复逐格点亮，并在偏好变化或卸载时还原样式。 -->
+<!-- GitHub 贡献日历：呈现真实贡献总量、通栏日期热图和文字明细；进入视口时逐列点亮并让总量计数滚动到真实值，完整离开后可重播，偏好变化或卸载时还原样式。 -->
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { gsap } from "gsap";
@@ -7,6 +7,8 @@ import type { ShowcaseContributions } from "../data/types";
 
 const props = defineProps<{ contributions: ShowcaseContributions }>();
 const root = ref<HTMLElement>();
+// 视觉计数随点亮过程滚动；读屏通过隐藏文本和热图说明读取真实总量。
+const shownTotal = ref(props.contributions.total);
 // 用副本按日期排序，保证热图与逐格入场都沿时间推进，不改变公开数据。
 const days = computed(() =>
   [...props.contributions.days].sort((a, b) => a.date.localeCompare(b.date)),
@@ -66,15 +68,20 @@ async function rebuildMotion() {
       },
       (preference) => {
         // 减少动态时还原后的格子全部可见；普通偏好切回后只在离开再进时重播。
+        const total = props.contributions.total;
         if (preference.conditions?.reduced) {
           presentedSignature = signature;
+          shownTotal.value = total;
           return;
         }
         const heatmap = root.value?.querySelector<HTMLElement>(".heatmap");
         const cells = Array.from(
           heatmap?.querySelectorAll<HTMLElement>(":scope > span") ?? [],
         );
-        if (!heatmap || !cells.length) return;
+        if (!heatmap || !cells.length) {
+          shownTotal.value = total;
+          return;
+        }
 
         // 仅正在入场的格子临时提升合成，不让整年数百格永久占用合成层。
         const originalWillChange = new Map(
@@ -120,16 +127,30 @@ async function rebuildMotion() {
           },
         );
 
+        const counter = { value: 0 };
+        const counterTween = gsap.to(counter, {
+          value: total,
+          duration: 1.7,
+          ease: "power3.out",
+          paused: true,
+          onUpdate: () => {
+            shownTotal.value = Math.round(counter.value);
+          },
+        });
+
         /** 当前停留只播一遍，重新进入时复用同一组 tween，不增加日期监听。 */
         const play = () => {
           if (!inside || !entryReady || started || done) return;
           started = true;
           tween.restart(true);
+          counterTween.restart(true);
         };
         const reset = () => {
           if (!started && !done) return;
           // clearProps 已清理终态内联样式，回到零点会再次施加低透明度和缩放初态。
           tween.pause(0, true);
+          counterTween.pause(0, true);
+          shownTotal.value = 0;
           started = false;
           done = false;
           cells.forEach(restoreWillChange);
@@ -140,9 +161,13 @@ async function rebuildMotion() {
           started = true;
           tween.progress(1).pause();
           cells.forEach(restoreWillChange);
+          shownTotal.value = total;
         } else if (heatmap.getBoundingClientRect().bottom <= 0) {
           started = true;
           tween.progress(1).pause();
+          shownTotal.value = total;
+        } else {
+          shownTotal.value = 0;
         }
         preserveVisibleOnRebuild = false;
 
@@ -165,6 +190,8 @@ async function rebuildMotion() {
         // matchMedia 跟踪动画，两级整体观察和手动设置的性能提示在重建时一并释放。
         return () => {
           presentedSignature = signature;
+          counterTween.kill();
+          shownTotal.value = total;
           visibilityObserver.disconnect();
           entryObserver.disconnect();
           cells.forEach(restoreWillChange);
@@ -191,8 +218,8 @@ onUnmounted(() => {
 <template>
   <div ref="root" class="contribution-calendar">
     <div class="contribution-summary">
-      <strong>{{ contributions.total.toLocaleString() }}</strong>
-      <span>次 GitHub 贡献<br /><small>{{ dateRange }}</small></span>
+      <strong aria-hidden="true">{{ shownTotal.toLocaleString() }}</strong>
+      <span><span class="visually-hidden">{{ contributions.total.toLocaleString() }} </span>次 GitHub 贡献<br /><small>{{ dateRange }}</small></span>
     </div>
     <div class="heatmap-scroll">
       <div

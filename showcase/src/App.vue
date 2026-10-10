@@ -1,18 +1,12 @@
-<!-- 展示站主体：按公开 API 编排代码、文章、游戏与动画展区，管理筛选、分页、原生弹窗、滚动动效与背景装饰。 -->
+<!-- 展示站主体：按公开 API 编排首屏舞台、精选作品、代码、文章、游戏与动画展区，管理页头反白、筛选、分页、原生弹窗、滚动动效、光标与背景装饰。 -->
 <script setup lang="ts">
-import {
-  computed,
-  defineAsyncComponent,
-  nextTick,
-  onMounted,
-  onUnmounted,
-  ref,
-  watch,
-} from "vue";
-import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import AppIcon from "./components/AppIcon.vue";
 import ContributionCalendar from "./components/ContributionCalendar.vue";
+import CustomCursor from "./components/CustomCursor.vue";
+import FeaturedWork from "./components/FeaturedWork.vue";
+import HeroStage from "./components/HeroStage.vue";
+import ManifestoBand from "./components/ManifestoBand.vue";
 import MediaCollection from "./components/MediaCollection.vue";
 import MotionHeading from "./components/MotionHeading.vue";
 import PatternAccent from "./components/PatternAccent.vue";
@@ -27,11 +21,8 @@ import type {
   ShowcaseProject,
 } from "./data/types";
 import { contactHref } from "./config/contact";
+import { vMagnetic } from "./directives/magnetic";
 
-// 三维装置延迟加载，文字、导航和公开数据不依赖 WebGL 初始化。
-const HeroSculpture = defineAsyncComponent(
-  () => import("./components/HeroSculpture.vue"),
-);
 const {
   data,
   loading,
@@ -64,6 +55,8 @@ const page = ref<HTMLElement>();
 const scrollMotion = useScrollMotion(page);
 const dialog = ref<HTMLDialogElement>();
 const menuOpen = ref(false);
+// 页头压在首屏蓝色舞台上时反白显示，由 HeroStage 根据滚动位置报告。
+const headerOnStage = ref(true);
 const activeSection = ref("home");
 const projectFilter = ref("全部");
 const selectedProject = ref<ShowcaseProject | null>(null);
@@ -75,6 +68,8 @@ const categories = computed(() => [
   "全部",
   ...new Set(data.value.projects.map((item) => item.language || item.category)),
 ]);
+// 前三个置顶仓库进入整屏精选场景；下方索引仍列出全部仓库并支持筛选。
+const featuredProjects = computed(() => data.value.projects.slice(0, 3));
 const projects = computed(() =>
   data.value.projects.filter(
     (item) =>
@@ -119,7 +114,6 @@ const dialogTitle = computed(
     selectedArticle.value?.title ??
     "从一句你好开始。",
 );
-let media: gsap.MatchMedia | undefined;
 let observer: IntersectionObserver | undefined;
 let previousFocus: HTMLElement | null = null;
 let previousOverflow = "";
@@ -258,6 +252,17 @@ async function copyContact(value: string) {
     copyMessage.value = "";
   }, 4000);
 }
+/** 联系区的描边文字以指针为圆心局部填充；坐标写入视口像素，配合固定背景定位。 */
+function trackContactPointer(event: PointerEvent) {
+  const section = event.currentTarget as HTMLElement;
+  section.style.setProperty("--mx", `${event.clientX}px`);
+  section.style.setProperty("--my", `${event.clientY}px`);
+}
+function resetContactPointer(event: PointerEvent) {
+  const section = event.currentTarget as HTMLElement;
+  section.style.removeProperty("--mx");
+  section.style.removeProperty("--my");
+}
 /** 公开模块、筛选和分页改变布局后，保留已有动效状态并注册新节点。 */
 async function syncSections() {
   await nextTick();
@@ -269,33 +274,6 @@ async function syncSections() {
 }
 onMounted(() => {
   if (!page.value) return;
-  media = gsap.matchMedia();
-  media.add(
-    "(prefers-reduced-motion: no-preference)",
-    () => {
-      gsap.to(".hero-name", {
-        y: -52,
-        ease: "none",
-        scrollTrigger: {
-          trigger: ".hero",
-          start: "top top",
-          end: "bottom top",
-          scrub: 0.6,
-        },
-      });
-      gsap.to(".manifesto-text", {
-        xPercent: -12,
-        ease: "none",
-        scrollTrigger: {
-          trigger: ".manifesto",
-          start: "top bottom",
-          end: "bottom top",
-          scrub: 0.7,
-        },
-      });
-    },
-    page.value,
-  );
   observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries)
@@ -329,7 +307,6 @@ watch(categories, (next) => {
   if (!next.includes(projectFilter.value)) projectFilter.value = "全部";
 });
 onUnmounted(() => {
-  media?.revert();
   observer?.disconnect();
   clearTimeout(copyTimer);
   if (dialog.value?.open) document.body.style.overflow = previousOverflow;
@@ -339,7 +316,11 @@ onUnmounted(() => {
 <template>
   <div ref="page" class="exhibition" @keydown.esc="closeMenu">
     <a class="skip-link" href="#main">跳到正文</a>
-    <header class="site-header">
+    <CustomCursor />
+    <header
+      class="site-header"
+      :class="{ 'is-on-stage': headerOnStage && !menuOpen }"
+    >
       <a
         class="wordmark"
         href="#home"
@@ -347,7 +328,6 @@ onUnmounted(() => {
         @click="navigate"
         >af<span class="wordmark-dot">.</span></a
       >
-      <span class="header-note mono">INDEPENDENT MIND. CURIOUS HANDS.</span>
       <nav class="desktop-nav" aria-label="主要导航">
         <a
           v-for="item in nav"
@@ -383,51 +363,7 @@ onUnmounted(() => {
       /></a>
     </nav>
     <main id="main">
-      <section id="home" class="hero textured-section" aria-labelledby="hero-title">
-        <PatternAccent variant="matrix" tone="light" class="hero-pattern-accent" />
-        <div class="hero-topline mono">
-          <span>PERSONAL DIGITAL EXHIBITION</span
-          ><span>CODE × EVERYDAY LIFE</span
-          ><span class="hero-edition">VOL. 01 / ONGOING</span>
-        </div>
-        <div class="hero-grid">
-          <div class="hero-kicker" data-motion-segment>
-            <span class="small-cross">+</span><span>保持好奇。持续创造。</span>
-          </div>
-          <h1 id="hero-title" class="hero-name" aria-label="AoralsFout" data-motion-heading>
-            <span class="hero-name-line" aria-hidden="true"><span data-motion-char>AORALS</span></span
-            ><span class="hero-name-line" aria-hidden="true"
-              ><span data-motion-char>FOUT<span class="name-period">.</span></span></span
-            >
-          </h1>
-          <div class="hero-sculpture-stage">
-            <HeroSculpture /><span class="sculpture-note mono"
-              >FORM / IN MOTION</span
-            >
-          </div>
-          <div class="hero-intro" data-motion-segment>
-            <span class="hero-intro-label mono">HELLO, I'M AORALSFOUT.</span>
-            <p>
-              代码里的一点想法，<br />和屏幕之外的<span class="yellow-underline"
-                >日常。</span
-              >
-            </p>
-            <a :href="'#' + firstSection" class="hero-cta"
-              >逛逛我的小世界<AppIcon :size="19"
-            /></a>
-          </div>
-          <div class="hero-coordinate mono" aria-hidden="true">
-            <span>GITHUB / NEOBLOG</span><span>STEAM / BANGUMI</span
-            ><span>ALWAYS EXPLORING</span>
-          </div>
-        </div>
-        <div class="hero-bottom mono">
-          <span>BUILDING, LEARNING, REPEAT.</span
-          ><a :href="'#' + firstSection"
-            >SCROLL TO EXPLORE<AppIcon name="down" :size="17" /></a
-          ><span>想法、记录，以及喜欢的事物。</span>
-        </div>
-      </section>
+      <HeroStage :first-section="firstSection" @tone="headerOnStage = $event" />
 
       <section
         v-if="
@@ -439,7 +375,7 @@ onUnmounted(() => {
       >
         <PatternAccent variant="stripes" class="work-pattern-accent" />
         <div class="section-label mono">
-          <span class="label-square"></span>01 / BUILT IN CODE
+          <span class="label-square"></span><span data-scramble>01 / BUILT IN CODE</span>
           <span v-if="isMock" class="sample-label">演示数据</span>
         </div>
         <div class="section-title-row">
@@ -453,6 +389,15 @@ onUnmounted(() => {
           </p>
         </div>
         <template v-if="exposed('github.pinned')">
+          <FeaturedWork
+            v-if="featuredProjects.length"
+            :projects="featuredProjects"
+            @open="(project) => openDetail('project', project)"
+          />
+          <div class="index-heading">
+            <h3>全部仓库</h3>
+            <span class="mono">INDEX / {{ total("github.pinned", data.projects.length) }}</span>
+          </div>
           <div class="work-toolbar">
             <div class="filter-list" role="group" aria-label="筛选项目语言">
               <button
@@ -475,25 +420,19 @@ onUnmounted(() => {
               v-for="(project, index) in projects"
               :key="project.slug"
               class="repo-card"
-              :class="{
-                'repo-featured': index === 0 && projectFilter === '全部',
-              }"
               @click="openDetail('project', project)"
             >
-              <div class="repo-top mono">
-                <span
-                  >{{ String(index + 1).padStart(2, "0") }} /
-                  {{ project.language || project.category }}</span
-                ><span v-if="project.stars !== undefined"
-                  >☆ {{ project.stars }}</span
-                >
-              </div>
-              <h3>{{ project.title }}</h3>
+              <span class="repo-index mono">{{ String(index + 1).padStart(2, "0") }}</span>
+              <span class="repo-name">
+                <h3>{{ project.title }}</h3>
+                <span class="mono">{{ project.fullName || project.title }}</span>
+              </span>
               <p>{{ project.description || "这个仓库暂时没有填写介绍。" }}</p>
-              <div class="repo-bottom">
-                <span class="mono">{{ project.fullName || project.title }}</span
-                ><span class="repo-open"><AppIcon :size="22" /></span>
-              </div>
+              <span class="repo-meta mono"
+                ><span>{{ project.language || project.category }}</span
+                ><span v-if="project.stars !== undefined">☆ {{ project.stars }}</span></span
+              >
+              <span class="repo-open"><AppIcon :size="20" /></span>
             </button>
           </div>
           <p v-if="!projects.length" class="empty-message" role="status">
@@ -590,7 +529,7 @@ onUnmounted(() => {
         aria-labelledby="journal-title"
       >
         <div class="section-label mono">
-          <span class="label-square"></span>02 / NOTES & THOUGHTS
+          <span class="label-square"></span><span data-scramble>02 / NOTES & THOUGHTS</span>
         </div>
         <div class="section-title-row">
           <MotionHeading
@@ -660,12 +599,7 @@ onUnmounted(() => {
         </button>
       </section>
 
-      <div class="manifesto" aria-hidden="true">
-        <div class="manifesto-text">
-          STAY CURIOUS.<span>✳</span>ENJOY THE EVERYDAY.<span>✳</span>STAY
-          CURIOUS.
-        </div>
-      </div>
+      <ManifestoBand />
 
       <section
         v-if="exposed('steam.profile', 'steam.games', 'bangumi.collections')"
@@ -675,7 +609,7 @@ onUnmounted(() => {
       >
         <PatternAccent variant="dots" class="offscreen-pattern-accent" />
         <div class="section-label mono">
-          <span class="label-square"></span>03 / AFTER THE SCREEN
+          <span class="label-square"></span><span data-scramble>03 / AFTER THE SCREEN</span>
         </div>
         <div class="section-title-row">
           <MotionHeading
@@ -832,7 +766,7 @@ onUnmounted(() => {
         <div class="about-grid">
           <div class="about-side">
             <div class="section-label mono">
-              <span class="label-square"></span>04 / A LITTLE ABOUT ME
+              <span class="label-square"></span><span data-scramble>04 / A LITTLE ABOUT ME</span>
             </div>
             <div class="about-symbol" aria-hidden="true">
               <span>a</span><span>f</span><i></i>
@@ -940,18 +874,23 @@ onUnmounted(() => {
         id="contact"
         class="contact-section section-shell textured-section"
         aria-labelledby="contact-title"
+        @pointermove="trackContactPointer"
+        @pointerleave="resetContactPointer"
       >
         <div class="contact-top mono">
-          <span><span class="label-square"></span>LET'S MAKE SOMETHING</span
+          <span><span class="label-square"></span><span data-scramble>LET'S MAKE SOMETHING</span></span
           ><span>GOOD IDEAS START WITH A HELLO.</span>
         </div>
         <div class="contact-main">
           <MotionHeading
             id="contact-title"
+            wipe="yellow"
             :lines="[[{ text: '有个想法？' }], [{ text: '聊' }, { text: '聊看。', tone: 'outline' }]]"
           />
           <button
+            v-magnetic="0.4"
             class="contact-orb"
+            data-cursor="HELLO"
             aria-label="查看联系方式"
             @click="openDetail('contact')"
           >

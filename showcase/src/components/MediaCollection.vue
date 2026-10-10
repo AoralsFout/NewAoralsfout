@@ -1,6 +1,6 @@
 <!--
  * 用途：展示公开 Steam 游戏与 Bangumi 动画收藏，保留真实图片、链接和收藏信息。
- * 职责：区分游戏小图列表与动画海报网格，呈现加载、错误、空列表及图片失败状态。
+ * 职责：区分游戏小图列表与动画海报网格，呈现加载、错误、空列表及图片失败状态；可悬停设备上海报默认为蓝白网点印刷效果，悬停或聚焦时还原原图。
  * 关键导出：MediaCollection 默认组件；接收 items、kind、loading、error、emptyMessage，不导出事件。
 -->
 <script setup lang="ts">
@@ -446,6 +446,53 @@ a.media-card:focus-visible {
   outline-offset: 6px;
 }
 
+/* 网点印刷：灰度原图叠蓝色滤色形成双色调，再叠一层网点；只在可悬停设备上使用，触屏直接显示原图。 */
+@media (hover: hover) {
+  .media-card--anime .media-card__image-frame:has(> img) {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .media-card--anime .media-card__image {
+    filter: grayscale(1) contrast(1.25) brightness(1.04);
+    transition:
+      filter 0.45s ease,
+      transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .media-card--anime .media-card__image-frame:has(> img)::before,
+  .media-card--anime .media-card__image-frame:has(> img)::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    transition: opacity 0.45s ease;
+  }
+
+  .media-card--anime .media-card__image-frame:has(> img)::before {
+    z-index: 1;
+    background: var(--blue);
+    mix-blend-mode: screen;
+  }
+
+  .media-card--anime .media-card__image-frame:has(> img)::after {
+    z-index: 2;
+    background-image: radial-gradient(rgb(17 17 17 / 0.5) 28%, transparent 34%);
+    background-size: 4px 4px;
+    mix-blend-mode: multiply;
+  }
+
+  a.media-card:is(:hover, :focus-visible) .media-card__image {
+    filter: none;
+    transform: scale(1.05);
+  }
+
+  a.media-card:is(:hover, :focus-visible) .media-card__image-frame::before,
+  a.media-card:is(:hover, :focus-visible) .media-card__image-frame::after {
+    opacity: 0;
+  }
+}
+
 @media (max-width: 1080px) {
   .media-collection--game .media-collection__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -482,8 +529,13 @@ a.media-card:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .media-card__arrow {
+  .media-card__arrow,
+  .media-card__image {
     transition: none;
+  }
+
+  a.media-card:is(:hover, :focus-visible) .media-card__image {
+    transform: none;
   }
 
   a.media-card:hover .media-card__arrow {

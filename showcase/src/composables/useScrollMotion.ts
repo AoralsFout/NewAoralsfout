@@ -1,6 +1,7 @@
 /**
  * 用途：为展示页建立分段滚动入场，统一管理标题、说明、卡片与内部滚动列表。
- * 职责：只注册新增节点，完整离开视口后允许重播，处理键盘焦点、减少动态偏好和卸载清理。
+ * 职责：标题先由矩形遮罩扫过、字符错位后归位，标签侧移并乱码解码，其余片段上移淡入；
+ * 只注册新增节点，完整离开视口后允许重播，处理键盘焦点、减少动态偏好和卸载清理。
  * 关键导出：useScrollMotion，返回 sync；调用方在公开数据或筛选更新 DOM 后同步布局。
  */
 import { onMounted, onUnmounted, type Ref } from "vue";
@@ -10,7 +11,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 type MotionRecord = {
   targets: HTMLElement[];
   context: gsap.Context;
-  tween: gsap.core.Tween;
+  tween: gsap.core.Timeline;
   started: boolean;
   done: boolean;
   inside: boolean;
@@ -153,7 +154,7 @@ export function useScrollMotion(root: Ref<HTMLElement | undefined>) {
         play(entries.filter((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.12).map((entry) => entry.target));
       }, { rootMargin: "0px 0px -12% 0px", threshold: 0.12 });
 
-      /** 仅使用位移和透明度；临时合成提示在播放结束和偏好切换时恢复。 */
+      /** 仅使用位移、旋转、横向缩放和透明度；临时合成提示在播放结束和偏好切换时恢复。 */
       function createRecord(node: HTMLElement, heading = false) {
         // 每条记录独立持有 context，移除时完整清空 GSAP 内部引用，避免反复筛选积累旧 DOM。
         const context = gsap.context(() => {}, page);
@@ -174,9 +175,77 @@ export function useScrollMotion(root: Ref<HTMLElement | undefined>) {
         });
         const isLabel = node.matches(".section-label, .contact-top");
         const keepVisible = presented.has(node) && isVisible(node);
-        // context.add 同步执行，暂停的 tween 建立后才可能接收触发或焦点事件。
+        const wipes = heading
+          ? Array.from(node.querySelectorAll<HTMLElement>("[data-motion-wipe]"))
+          : [];
+        const scramble = isLabel
+          ? node.querySelector<HTMLElement>("[data-scramble]")
+          : null;
+        // context.add 同步执行，暂停的时间线建立后才可能接收触发或焦点事件。
         let record!: MotionRecord;
         context.add(() => {
+          const timeline = gsap.timeline({
+            paused: true,
+            onStart: () => targets.forEach((target) => {
+              target.style.willChange = "transform, opacity";
+            }),
+            onComplete: () => {
+              record.done = true;
+              presented.add(node);
+              restoreHints();
+            },
+          });
+          if (heading) {
+            // 每行遮罩从左侧展开盖住字面，字符在遮罩下交替从上下错位归位，遮罩再向右收回露出标题。
+            timeline
+              .fromTo(wipes,
+                { scaleX: 0, transformOrigin: "0% 50%" },
+                { scaleX: 1, duration: 0.42, ease: "power3.inOut", stagger: 0.08, immediateRender: true })
+              .set(wipes, { transformOrigin: "100% 50%" })
+              .fromTo(targets,
+                { yPercent: (index: number) => (index % 2 ? -110 : 110), rotation: (index: number) => (index % 2 ? 7 : -7), opacity: 0 },
+                {
+                  yPercent: 0,
+                  rotation: 0,
+                  opacity: 1,
+                  duration: 0.8,
+                  ease: "expo.out",
+                  stagger: { amount: 0.3 },
+                  immediateRender: true,
+                  clearProps: "opacity,transform",
+                })
+              .to(wipes, {
+                scaleX: 0,
+                duration: 0.5,
+                ease: "power3.inOut",
+                stagger: 0.08,
+                clearProps: "transform,transformOrigin",
+              }, "<");
+          } else {
+            timeline.fromTo(targets,
+              { y: isLabel ? 0 : 26, x: isLabel ? -18 : 0, opacity: 0 },
+              {
+                y: 0,
+                x: 0,
+                opacity: 1,
+                duration: 0.65,
+                ease: "power3.out",
+                immediateRender: true,
+                clearProps: "opacity,transform",
+              });
+            // 乱码终点就是原文；时间线完成或被直接跳到终点时文字总能还原。
+            if (scramble?.textContent) {
+              timeline.to(scramble, {
+                duration: 0.9,
+                ease: "none",
+                scrambleText: {
+                  text: scramble.textContent,
+                  chars: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/",
+                  speed: 0.7,
+                },
+              }, 0);
+            }
+          }
           record = {
             targets,
             context,
@@ -186,30 +255,7 @@ export function useScrollMotion(root: Ref<HTMLElement | undefined>) {
             entryReady: false,
             restoreHints,
             restoreGeometry,
-            tween: gsap.fromTo(targets,
-            heading
-              ? { yPercent: 105, opacity: 0 }
-              : { y: isLabel ? 0 : 26, x: isLabel ? -18 : 0, opacity: 0 },
-            {
-              y: 0,
-              x: 0,
-              yPercent: 0,
-              opacity: 1,
-              duration: heading ? 0.85 : 0.65,
-              ease: heading ? "power4.out" : "power3.out",
-              stagger: heading ? { amount: 0.38 } : 0,
-              paused: true,
-              immediateRender: true,
-              clearProps: "opacity,transform",
-              onStart: () => targets.forEach((target) => {
-                target.style.willChange = "transform, opacity";
-              }),
-              onComplete: () => {
-                record.done = true;
-                presented.add(node);
-                restoreHints();
-              },
-            }),
+            tween: timeline,
           };
         });
         records.set(node, record);
