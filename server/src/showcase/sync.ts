@@ -27,8 +27,9 @@ export async function refresh(requestId: string) {
     const cache = await prisma.showcaseCache.findUnique({ where: { moduleId: id } });
     const sourceIds = modules.filter(m => m.source === module.source).map(m => m.id);
     const sourceLimits = await prisma.showcaseCache.findMany({ where: { moduleId: { in: sourceIds }, lastResult: 'rate_limited' } });
-    // nextAttemptAt 包含正常轮询窗口和上游 Retry-After；手动请求遵循同一窗口。
-    const earliest = Math.max(cache?.nextAttemptAt?.getTime() || 0, (cache?.lastAttemptAt?.getTime() || 0) + 30000, ...sourceLimits.map(c => c.nextAttemptAt?.getTime() || 0));
+    // 普通失败的 nextAttemptAt 只约束自动调度，修正凭据后可手动重试；成功轮询与来源限流仍不可绕过。
+    const upstreamWait = cache?.lastResult === 'ok' || cache?.lastResult === 'rate_limited' ? cache.nextAttemptAt?.getTime() || 0 : 0;
+    const earliest = Math.max(upstreamWait, (cache?.lastAttemptAt?.getTime() || 0) + 30000, ...sourceLimits.map(c => c.nextAttemptAt?.getTime() || 0));
     if (earliest > Date.now()) throw new ApiError(429, 'REFRESH_TOO_SOON', '尚未到允许刷新时间', Math.ceil((earliest - Date.now()) / 1000));
     if (!configured(id)) throw new ApiError(503, 'SOURCE_UNCONFIGURED', '来源参数或凭据未配置');
     const start = Date.now(), attemptedAt = new Date(start);

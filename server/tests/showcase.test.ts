@@ -243,6 +243,33 @@ test('全量语言统计取齐公开及私有仓库，按字节汇总且公开�
   assert.equal((await supertest(app).get('/api/showcase/modules/github.language-stats/data')).status, 404);
 });
 
+test('修正凭据后可在三十秒后手动重试语言统计，无需等待自动调度或清除失败缓存', async () => {
+  let permitted = false;
+  mock.method(globalThis, 'fetch', async (url: string) => new Response(JSON.stringify(
+    new URL(url).pathname === '/user'
+      ? { login: 'fixture', public_repos: 0, ...(permitted ? { owned_private_repos: 0 } : {}) }
+      : [],
+  )));
+  const retry = () => supertest(app).post('/api/showcase/admin/modules/github.language-stats/refresh')
+    .set('Cookie', `nb_token=${token()}`).set('Origin', origin).send({});
+  assert.equal((await retry()).body.error.code, 'GITHUB_SCOPE_UNVERIFIED');
+  const cache = caches.get('github.language-stats');
+  assert.equal(cache.blocked, true);
+  assert.ok(cache.nextAttemptAt.getTime() > Date.now() + 23 * 60 * 60 * 1000);
+  permitted = true;
+  assert.equal((await retry()).status, 429);
+  // 仅模拟最短重试窗口已结束，不清除原来的失败记录或自动调度等待时间。
+  cache.lastAttemptAt = new Date(Date.now() - 31000);
+  caches.set('github.profile', { ...initialCache('github.profile'), lastResult: 'rate_limited', nextAttemptAt: new Date(Date.now() + 120000) });
+  assert.equal((await retry()).status, 429);
+  caches.delete('github.profile');
+  assert.equal((await retry()).status, 200);
+  assert.equal(cache.lastResult, 'ok');
+  assert.equal(cache.lastErrorCode, null);
+  assert.equal(cache.blocked, false);
+  assert.equal((await supertest(app).get('/api/showcase/modules/github.language-stats/data')).status, 200);
+});
+
 test('全量语言网络失败保留旧汇总，私有仓库 404 或权限失效停止公开旧汇总且不影响公开仓库模块', async () => {
   const payload = { repositoryCount: 1, repositoriesWithLanguages: 1, totalBytes: 5, languages: [{ name: 'TypeScript', bytes: 5, percentage: 100, repositoryCount: 1 }] };
   const cache = initialCache('github.language-stats', payload); caches.set('github.language-stats', cache);
