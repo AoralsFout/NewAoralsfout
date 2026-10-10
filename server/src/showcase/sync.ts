@@ -58,7 +58,7 @@ export async function refresh(requestId: string) {
       await prisma.$transaction(async tx => {
         for (const moduleId of ids) await tx.showcaseCache.update({ where: { moduleId }, data: { lastResult: failure.result, lastErrorCode: failure.code, lastErrorMessage: failure.message, upstreamStatus: failure.status ?? null, durationMs: Date.now() - start, nextAttemptAt, ...(failure.privateData ? { blocked: true } : {}) } });
         // 用户整体资料隐藏或消失时，立即停止同一账号的旧快照公开，不等待各自的下一次定时采集。
-        if (failure.privateData && ['steam.profile', 'steam.status', 'github.profile', 'github.activity', 'github.pinned'].includes(id)) {
+        if (failure.privateData && ['steam.profile', 'steam.status', 'github.profile', 'github.activity', 'github.pinned', 'github.repositories'].includes(id)) {
           for (const moduleId of sourceIds.filter(s => s !== id)) {
             if (await tx.showcaseCache.findUnique({ where: { moduleId } })) await tx.showcaseCache.update({ where: { moduleId }, data: { blocked: true, lastResult: 'private', lastErrorCode: 'ACCOUNT_NOT_PUBLIC', lastErrorMessage: '账号资料已隐藏或不存在', nextAttemptAt } });
           }

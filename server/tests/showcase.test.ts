@@ -1,4 +1,4 @@
-/** 展示站集成验收；使用内存数据库替身和可控上游验证真实 HTTP 鉴权、过滤、同步与错误，不改共享业务数据。 */
+/** 展示站集成验收；使用内存数据库替身和可控上游验证 HTTP 鉴权、过滤、完整仓库分页、同步与错误，不改共享业务数据。 */
 import { before, beforeEach, afterEach, after, test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import supertest from 'supertest';
@@ -11,6 +11,8 @@ let prisma: any, app: any, env: any, generateToken: any, refresh: any;
 let users: any[], goals: any[], personal: any, modules: any[], caches: Map<string, any>, overrides: any[];
 const origin = 'http://localhost:5174';
 const initialCache = (moduleId: string, payload: any = null): any => ({ moduleId, payload, lastAttemptAt: null, lastSuccessAt: payload === null ? null : new Date(), nextAttemptAt: null, lastResult: payload === null ? 'never' : 'ok', lastErrorCode: null, lastErrorMessage: null, upstreamStatus: null, durationMs: null, etag: null, blocked: false });
+/** 构造仓库上游响应；包含 Fork、归档与空字段，以验证新增接口的实际字段映射。 */
+const repository = (id: number) => ({ id, name: `repo-${id}`, full_name: `fixture/repo-${id}`, private: false, description: null, html_url: `https://github.com/fixture/repo-${id}`, homepage: '', stargazers_count: id, forks_count: 2, language: id === 1 ? null : 'TypeScript', fork: id === 1, archived: id === 2, default_branch: 'main', topics: ['web'], created_at: '2026-01-01T00:00:00Z', updated_at: id === 101 ? '2026-02-01T00:00:00Z' : '2026-01-01T00:00:00Z', pushed_at: null });
 function token(id = 1, tv = 0) { return generateToken({ userId: id, natayarkId: id, username: '测试', role: 'admin', tv }); }
 function http(id = 1) { return supertest(app).get('/api/showcase/admin/modules').set('Cookie', `nb_token=${token(id)}`); }
 /** 替身模拟 Prisma 的查询、更新与事务接口，使鉴权、路由和同步代码保持原样运行。 */
@@ -56,6 +58,100 @@ beforeEach(async () => {
 });
 afterEach(() => mock.restoreAll());
 after(async () => prisma.$disconnect());
+
+test('新增仓库模块初始化为隐藏且重复初始化保留已有开关', async () => {
+  modules = modules.filter(m => m.id !== 'github.repositories');
+  mock.method(prisma.showcaseModule, 'upsert', async ({ where, create, update }: any) => {
+    const current = modules.find(m => m.id === where.id);
+    if (current) return Object.assign(current, update);
+    const created = { visible: false, ...create }; modules.push(created); return created;
+  });
+  const { initializeModules } = await import('../src/showcase/catalog');
+  await initializeModules();
+  const added = modules.find(m => m.id === 'github.repositories');
+  assert.equal(added.visible, false);
+  assert.equal((await supertest(app).get('/api/showcase/modules/github.repositories/data')).status, 404);
+  added.visible = true; await initializeModules(); assert.equal(added.visible, true);
+});
+
+test('全部仓库无需 Token，完整分页后映射、排序、过滤私有条目与分页隐藏，管理接口保留内部信息', async () => {
+  env.githubToken = '';
+  const pages: number[] = [];
+  mock.method(globalThis, 'fetch', async (url: string, options: RequestInit) => {
+    const parsed = new URL(url), page = Number(parsed.searchParams.get('page')); pages.push(page);
+    assert.equal(parsed.pathname, '/users/fixture/repos');
+    assert.equal(parsed.searchParams.get('per_page'), '100');
+    assert.equal(parsed.searchParams.get('type'), 'owner');
+    assert.equal(parsed.searchParams.get('sort'), 'full_name');
+    assert.equal(new Headers(options.headers).has('Authorization'), false);
+    const data = page === 1 ? Array.from({ length: 100 }, (_, i) => repository(i + 1)) : [repository(101), { id: 102, private: true, secret: '不得缓存' }];
+    return new Response(JSON.stringify(data));
+  });
+  const refreshResponse = await supertest(app).post('/api/showcase/admin/modules/github.repositories/refresh').set('Cookie', `nb_token=${token()}`).set('Origin', origin).send({});
+  assert.equal(refreshResponse.status, 200); assert.deepEqual(pages, [1, 2]);
+  assert.equal(caches.get('github.repositories').payload.length, 101);
+  assert.equal(caches.get('github.repositories').payload[0].id, 101);
+  assert.equal((await supertest(app).get('/api/showcase/modules')).body.data.find((m: any) => m.id === 'github.repositories').available, true);
+  const response = await supertest(app).get('/api/showcase/modules/github.repositories/data?limit=2');
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.pagination, { page: 1, limit: 2, total: 101 });
+  assert.deepEqual(response.body.data[1], { id: 1, name: 'repo-1', fullName: 'fixture/repo-1', description: null, url: 'https://github.com/fixture/repo-1', homepage: null, stars: 1, forks: 2, language: null, fork: true, archived: false, defaultBranch: 'main', topics: ['web'], createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', pushedAt: null });
+  assert.equal(response.body.meta.moduleId, 'github.repositories');
+  assert.equal(response.body.meta.freshness, 'fresh');
+  assert.equal((await supertest(app).get('/api/showcase/modules/github.repositories/data?page=51&limit=2')).body.data[0].id, 100);
+  assert.equal((await supertest(app).put('/api/showcase/admin/modules/github.repositories/items/101/visibility').set('Cookie', `nb_token=${token()}`).set('Origin', origin).send({ visible: false })).status, 200);
+  const filtered = await supertest(app).get('/api/showcase/modules/github.repositories/data?limit=2');
+  assert.equal(filtered.body.pagination.total, 100); assert.equal(filtered.body.data[0].id, 1); assert.equal(filtered.body.data[1].archived, true);
+  // 缓存含有额外内部字段时，公开投影仍只返回白名单。
+  caches.get('github.repositories').payload[1].secret = '不得公开';
+  assert.equal((await supertest(app).get('/api/showcase/modules/github.repositories/data?limit=1')).body.data[0].secret, undefined);
+  const managed = await supertest(app).get('/api/showcase/admin/modules/github.repositories/data?limit=1').set('Cookie', `nb_token=${token()}`);
+  assert.equal(managed.body.pagination.total, 101); assert.equal(managed.body.data[0].itemId, '101'); assert.equal(managed.body.data[0].itemVisible, false);
+  assert.equal((await supertest(app).get('/api/showcase/modules/github.repositories/data?limit=101')).status, 400);
+  assert.equal((await supertest(app).get('/api/showcase/modules/github.repositories/data?category=watched')).status, 400);
+  modules.find(m => m.id === 'github.repositories').visible = false;
+  assert.equal((await supertest(app).get('/api/showcase/modules/github.repositories/data')).status, 404);
+});
+
+test('仓库分页中途失败保留旧快照，成功空结果清除旧数据且保留隐藏设置', async () => {
+  const cache = initialCache('github.repositories', [{ itemId: '1', name: '旧仓库' }]); caches.set('github.repositories', cache);
+  const snapshot = cache.payload, successAt = cache.lastSuccessAt;
+  overrides.push({ moduleId: 'github.repositories', itemId: '1', visible: false });
+  mock.method(globalThis, 'fetch', async (url: string) => {
+    if (new URL(url).searchParams.get('page') === '2') throw new Error('分页失败');
+    return new Response(JSON.stringify(Array.from({ length: 100 }, (_, i) => repository(i + 1))));
+  });
+  await assert.rejects(refresh('github.repositories'), (e: any) => e.status === 502);
+  assert.equal(cache.payload, snapshot); assert.equal(cache.lastSuccessAt, successAt);
+  cache.nextAttemptAt = null; cache.lastAttemptAt = null;
+  mock.method(globalThis, 'fetch', async () => new Response('[]'));
+  await refresh('github.repositories'); assert.deepEqual(cache.payload, []); assert.equal(overrides.length, 1);
+  const response = await supertest(app).get('/api/showcase/modules/github.repositories/data');
+  assert.equal(response.status, 200); assert.equal(response.body.pagination.total, 0);
+});
+
+test('仓库采集依据 Link 获取短分页，重复条目或空中间页均不能覆盖快照', async () => {
+  const next = '<https://api.github.com/users/fixture/repos?page=2>; rel="next"';
+  mock.method(globalThis, 'fetch', async (url: string) => new Response(JSON.stringify([repository(Number(new URL(url).searchParams.get('page')))]), { headers: { Link: new URL(url).searchParams.get('page') === '1' ? next : '<https://api.github.com/users/fixture/repos?page=1>; rel="prev"' } }));
+  await refresh('github.repositories');
+  const cache = caches.get('github.repositories'), snapshot = cache.payload; assert.equal(snapshot.length, 2);
+  for (const empty of [false, true]) {
+    cache.nextAttemptAt = null; cache.lastAttemptAt = null;
+    mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify(empty ? [] : [repository(1)]), { headers: { Link: next } }));
+    await assert.rejects(refresh('github.repositories'), (e: any) => e.code === 'INCOMPLETE_DATA');
+    assert.equal(cache.payload, snapshot);
+  }
+});
+
+test('仓库列表确认账号不存在时停止公开同源快照，其他 GitHub 模块确认撤回也阻止仓库列表', async () => {
+  for (const moduleId of ['github.repositories', 'github.profile', 'github.pinned']) caches.set(moduleId, initialCache(moduleId, moduleId === 'github.profile' ? { login: 'fixture' } : [{ itemId: '1', name: '旧仓库' }]));
+  mock.method(globalThis, 'fetch', async () => new Response('{}', { status: 404 }));
+  await assert.rejects(refresh('github.repositories'), (e: any) => e.status === 502);
+  for (const moduleId of ['github.repositories', 'github.profile', 'github.pinned']) assert.equal((await supertest(app).get(`/api/showcase/modules/${moduleId}/data`)).status, 503);
+  caches.clear(); caches.set('github.repositories', initialCache('github.repositories', [{ itemId: '1', name: '旧仓库' }]));
+  await assert.rejects(refresh('github.profile'));
+  assert.equal(caches.get('github.repositories').blocked, true);
+});
 test('未登录 401，普通成员 403；数据库最新角色、禁用状态和令牌版本立即生效', async () => {
   assert.equal((await supertest(app).get('/api/showcase/admin/modules')).status, 401);
   assert.equal((await http(2)).status, 403);

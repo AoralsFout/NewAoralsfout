@@ -1,4 +1,4 @@
-/** 来源适配器；继承 AboutMe 字段映射和 NeoBlog 文章投影，完整采集后输出白名单快照。 */
+/** 来源适配器；继承 AboutMe 字段映射和 NeoBlog 文章投影，完整采集仓库等来源后由 collect 输出白名单快照。 */
 import { z } from 'zod';
 import { env } from '../../config/env';
 import prisma from '../../config/database';
@@ -93,8 +93,41 @@ async function graphql(query: string, signal: AbortSignal) {
   if (!data.data?.user) throw new UpstreamError('private', 'GITHUB_NOT_FOUND', 'GitHub 用户不存在', undefined, undefined, true);
   return data.data.user;
 }
+/** 取齐账号名下全部公开仓库（含 Fork 和归档）；分页失败或重复 ID 时拒绝发布不完整快照。 */
+async function githubRepositoriesSnapshot(signal: AbortSignal): Promise<Snapshot> {
+  const payload: Item[] = [], seen = new Set<number>();
+  for (let page = 1; ; page++) {
+    // 按名称采集，避免仓库更新导致跨页顺序变化；不访问 Link 中的 URL，以免向其他主机发送凭据。
+    const url = `https://api.github.com/users/${encodeURIComponent(env.githubUsername)}/repos?type=owner&sort=full_name&direction=asc&per_page=100&page=${page}`;
+    const result = await request(url, signal, { headers: githubHeaders() }, true);
+    const repos = z.array(object).max(100).parse(result.data);
+    for (const repo of repos) {
+      const repoId = integer.parse(repo.id);
+      if (seen.has(repoId)) throw new UpstreamError('error', 'INCOMPLETE_DATA', '仓库分页出现重复条目，请稍后重试');
+      seen.add(repoId);
+      // 即使配置了能读取私有仓库的 Token，也仅缓存明确公开的条目。
+      if (z.boolean().parse(repo.private)) continue;
+      payload.push({
+        itemId: String(repoId), id: repoId, name: z.string().parse(repo.name), fullName: z.string().parse(repo.full_name),
+        description: z.string().nullable().parse(repo.description), url: z.string().parse(repo.html_url), homepage: z.string().nullable().parse(repo.homepage || null),
+        stars: integer.parse(repo.stargazers_count), forks: integer.parse(repo.forks_count), language: z.string().nullable().parse(repo.language),
+        fork: z.boolean().parse(repo.fork), archived: z.boolean().parse(repo.archived), defaultBranch: z.string().parse(repo.default_branch),
+        topics: z.array(z.string()).parse(repo.topics ?? []), createdAt: z.string().datetime().parse(repo.created_at),
+        updatedAt: z.string().datetime().parse(repo.updated_at), pushedAt: z.string().datetime().nullable().parse(repo.pushed_at),
+      });
+    }
+    // 优先依据分页关系；没有 Link 时以不足一页作为结束条件，整页结果继续请求，避免截断到 100 条。
+    const link = result.headers.get('link');
+    const hasNext = link !== null ? /<[^>]+>;\s*rel="next"/.test(link) : repos.length === 100;
+    if (!hasNext) break;
+    if (!repos.length) throw new UpstreamError('error', 'INCOMPLETE_DATA', '仓库分页为空但仍有下一页');
+  }
+  payload.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) || a.id - b.id);
+  return { payload };
+}
 async function githubSnapshot(id: string, signal: AbortSignal, etag?: string | null): Promise<Snapshot> {
   const login = encodeURIComponent(env.githubUsername);
+  if (id === 'github.repositories') return githubRepositoriesSnapshot(signal);
   if (id === 'github.contributions') {
     const user = await graphql('query($login:String!){ user(login:$login){ contributionsCollection { contributionCalendar { totalContributions weeks { contributionDays { date contributionCount color } } } } } }', signal);
     const calendar = z.object({ totalContributions: integer, weeks: z.array(z.object({ contributionDays: z.array(z.object({ date: z.string(), contributionCount: integer, color: z.string() })) })) }).parse(user.contributionsCollection?.contributionCalendar);

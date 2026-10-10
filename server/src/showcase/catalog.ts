@@ -11,6 +11,7 @@ export const modules = [
   { id: 'github.contributions', name: 'GitHub 贡献日历', source: 'github', interval: 24 * hour, list: false, items: false },
   { id: 'github.activity', name: 'GitHub 最近活动', source: 'github', interval: 30 * minute, list: true, items: true },
   { id: 'github.pinned', name: 'GitHub 置顶仓库', source: 'github', interval: 6 * hour, list: true, items: true },
+  { id: 'github.repositories', name: 'GitHub 全部公开仓库', source: 'github', interval: 6 * hour, list: true, items: true },
   { id: 'github.languages', name: '置顶仓库语言构成', source: 'github', interval: 24 * hour, list: true, items: false, parent: 'github.pinned' },
   { id: 'neoblog.articles', name: 'NeoBlog 文章', source: 'neoblog', interval: 15 * minute, list: true, items: true },
   { id: 'neoblog.tags', name: 'NeoBlog 标签', source: 'neoblog', interval: 15 * minute, list: true, items: false, parent: 'neoblog.articles' },

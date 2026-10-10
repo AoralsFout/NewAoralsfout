@@ -8,6 +8,7 @@ const fields: Record<string, string[]> = {
   'bangumi.collections': ['subjectId', 'name', 'image', 'category', 'rate', 'url'],
   'github.profile': ['login', 'name', 'avatar', 'bio', 'url', 'publicRepos', 'followers', 'following'],
   'github.activity': ['type', 'repo', 'createdAt', 'url'], 'github.pinned': ['name', 'fullName', 'description', 'url', 'homepage', 'stars', 'language'],
+  'github.repositories': ['id', 'name', 'fullName', 'description', 'url', 'homepage', 'stars', 'forks', 'language', 'fork', 'archived', 'defaultBranch', 'topics', 'createdAt', 'updatedAt', 'pushedAt'],
   'neoblog.articles': ['id', 'title', 'summary', 'coverImage', 'tags', 'createdAt', 'updatedAt', 'url'],
 };
 export function freshness(id: string, cache: ShowcaseCache | null, now = Date.now()): 'fresh' | 'stale' | 'unavailable' {
