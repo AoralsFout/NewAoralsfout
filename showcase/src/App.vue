@@ -46,7 +46,7 @@ const {
   modules: [
     "github.profile",
     "github.pinned",
-    "github.languages",
+    "github.language-stats",
     "github.activity",
     "github.contributions",
     "neoblog.articles",
@@ -102,7 +102,7 @@ const goalLabels = {
   completed: "已完成",
 };
 const nav = computed(() => [
-  ...(exposed("github.pinned", "github.languages", "github.activity", "github.contributions")
+  ...(exposed("github.pinned", "github.language-stats", "github.activity", "github.contributions")
     ? [{ id: "work", label: "代码" }]
     : []),
   ...(exposed("neoblog.articles") ? [{ id: "journal", label: "文字" }] : []),
@@ -431,7 +431,7 @@ onUnmounted(() => {
 
       <section
         v-if="
-          exposed('github.pinned', 'github.languages', 'github.activity', 'github.contributions')
+          exposed('github.pinned', 'github.language-stats', 'github.activity', 'github.contributions')
         "
         id="work"
         class="work-section section-shell textured-section"
@@ -509,23 +509,12 @@ onUnmounted(() => {
             }}<AppIcon name="down" :size="16" />
           </button>
         </template>
-        <template v-if="exposed('github.languages')">
-          <TechStack
-            :repositories="data.languages"
-            :state="moduleStates['github.languages']"
-            :empty-message="emptyMessage('github.languages', '暂无公开技术栈数据。')"
-            @layout="scrollMotion.sync()"
-          />
-          <div v-if="data.languages.length" class="collection-bottom">
-            <span class="mono">已展示 {{ data.languages.length }} / {{ total('github.languages', data.languages.length) }} 个仓库</span>
-            <button
-              v-if="moreVisible('github.languages')"
-              class="load-more"
-              :disabled="busy('github.languages')"
-              @click="showMore('github.languages', $event)"
-            >{{ busy('github.languages') ? '读取中…' : '更多仓库技术' }}<AppIcon name="down" :size="16" /></button>
-          </div>
-        </template>
+        <TechStack
+          v-if="exposed('github.language-stats')"
+          :stats="data.languageStats"
+          :state="moduleStates['github.language-stats']"
+          :empty-message="emptyMessage('github.language-stats', '暂无语言统计数据。')"
+        />
         <div
           v-if="exposed('github.contributions', 'github.activity')"
           class="code-records"

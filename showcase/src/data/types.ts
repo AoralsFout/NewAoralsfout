@@ -8,7 +8,7 @@ export type ModuleSource = "github" | "steam" | "bangumi" | "neoblog" | "local";
 export type ModuleId =
   | "github.profile"
   | "github.pinned"
-  | "github.languages"
+  | "github.language-stats"
   | "github.activity"
   | "github.contributions"
   | "steam.profile"
@@ -103,11 +103,12 @@ export interface ShowcaseLanguage {
   percentage: number;
 }
 
-/** 按公开仓库保留语言数据，完整名称用于分页合并和界面关联。 */
-export interface ShowcaseRepositoryLanguages {
-  name: string;
-  fullName: string;
-  languages: ShowcaseLanguage[];
+/** 全部仓库的语言汇总，仅包含统计值，不包含任何逐仓库身份信息。 */
+export interface ShowcaseLanguageStats {
+  repositoryCount: number;
+  repositoriesWithLanguages: number;
+  totalBytes: number;
+  languages: Array<ShowcaseLanguage & { repositoryCount: number }>;
 }
 
 export interface ShowcaseArticle {
@@ -184,7 +185,7 @@ export interface ShowcaseData {
   profile: ShowcaseProfile;
   status: ShowcaseStatus | null;
   projects: ShowcaseProject[];
-  languages: ShowcaseRepositoryLanguages[];
+  languageStats: ShowcaseLanguageStats | null;
   articles: ShowcaseArticle[];
   goals: ShowcaseGoal[];
   contacts: ShowcaseContactMethod[];
@@ -198,7 +199,7 @@ export interface ShowcaseData {
     | "profile"
     | "status"
     | "projects"
-    | "languages"
+    | "languageStats"
     | "articles"
     | "goals"
     | "contacts"

@@ -117,25 +117,20 @@ export const mockShowcaseData: ShowcaseData = {
     updatedAt: "2026-10-08T09:30:00Z",
   },
   projects: staticProjects,
-  // 显式样例使用独立的示例仓库命名，字节数与百分比一致，不用来描述真实技能。
-  languages: [
-    {
-      name: "NeoBlog",
-      fullName: "sample/NeoBlog",
-      languages: [
-        { name: "TypeScript", bytes: 1200, percentage: 60 },
-        { name: "Vue", bytes: 800, percentage: 40 },
-      ],
-    },
-    {
-      name: "AoralsFout",
-      fullName: "sample/AoralsFout",
-      languages: [
-        { name: "TypeScript", bytes: 600, percentage: 30 },
-        { name: "Vue", bytes: 1400, percentage: 70 },
-      ],
-    },
-  ],
+  // 显式样例仅提供独立汇总，字节数与百分比一致，不用来描述真实技能。
+  languageStats: {
+    repositoryCount: 8,
+    repositoriesWithLanguages: 7,
+    totalBytes: 1_000_000,
+    languages: [
+      { name: "TypeScript", bytes: 420_000, percentage: 42, repositoryCount: 5 },
+      { name: "Vue", bytes: 280_000, percentage: 28, repositoryCount: 4 },
+      { name: "Rust", bytes: 140_000, percentage: 14, repositoryCount: 2 },
+      { name: "JavaScript", bytes: 90_000, percentage: 9, repositoryCount: 3 },
+      { name: "CSS", bytes: 50_000, percentage: 5, repositoryCount: 4 },
+      { name: "HTML", bytes: 20_000, percentage: 2, repositoryCount: 3 },
+    ],
+  },
   articles: [
     {
       id: "type-as-interface",
@@ -269,7 +264,7 @@ export const mockShowcaseData: ShowcaseData = {
     "profile",
     "status",
     "projects",
-    "languages",
+    "languageStats",
     "articles",
     "goals",
     "contacts",

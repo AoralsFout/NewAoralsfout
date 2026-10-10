@@ -21,7 +21,7 @@ import type {
   ShowcasePagination,
   ShowcaseProfile,
   ShowcaseProject,
-  ShowcaseRepositoryLanguages,
+  ShowcaseLanguageStats,
   ShowcaseStatus,
   ShowcaseSteamProfile,
   ShowcaseSteamStatus,
@@ -41,7 +41,7 @@ interface ApiEnvelope {
 export interface ShowcaseDataOptions {
   mode?: DataMode;
   apiBase?: string;
-  /** 仅加载页面实际使用的模块；活动、贡献图和语言构成默认不请求。 */
+  /** 仅加载页面实际使用的模块；活动、贡献图和语言统计默认不请求。 */
   modules?: readonly ModuleId[];
   pageSize?: number;
 }
@@ -49,7 +49,7 @@ export interface ShowcaseDataOptions {
 const moduleIds: ModuleId[] = [
   "github.profile",
   "github.pinned",
-  "github.languages",
+  "github.language-stats",
   "github.activity",
   "github.contributions",
   "steam.profile",
@@ -62,11 +62,10 @@ const moduleIds: ModuleId[] = [
   "contacts",
 ];
 const defaultModules = moduleIds.filter(
-  (id) => id !== "github.activity" && id !== "github.contributions" && id !== "github.languages",
+  (id) => id !== "github.activity" && id !== "github.contributions" && id !== "github.language-stats",
 );
 const listModules = new Set<ModuleId>([
   "github.pinned",
-  "github.languages",
   "github.activity",
   "steam.games",
   "bangumi.collections",
@@ -159,7 +158,7 @@ function emptyData(): ShowcaseData {
     },
     status: null,
     projects: [],
-    languages: [],
+    languageStats: null,
     articles: [],
     goals: [],
     contacts: [],
@@ -227,24 +226,33 @@ function mapProjects(value: unknown): ShowcaseProject[] {
     ];
   });
 }
-/** 仅保留公开响应中的仓库和精确语言数值，不推断框架、技能或隐藏仓库。 */
-function mapLanguages(value: unknown): ShowcaseRepositoryLanguages[] {
-  return list(value).flatMap((raw) => {
-    const item = object(raw);
-    const name = text(item?.name, 200);
-    const fullName = text(item?.fullName, 300);
-    if (!item || !name || !fullName || !Array.isArray(item.languages)) return [];
-    const languages = list(item.languages).flatMap((rawLanguage) => {
-      const language = object(rawLanguage);
-      const languageName = text(language?.name, 100);
-      const bytes = language?.bytes;
-      const percentage = language?.percentage;
-      // 拒绝非法数值而不截断或重算，保持后端的字节数与百分比精度。
-      if (!languageName || typeof bytes !== "number" || !Number.isSafeInteger(bytes) || bytes < 0 || typeof percentage !== "number" || !Number.isFinite(percentage) || percentage < 0 || percentage > 100) return [];
-      return [{ name: languageName, bytes, percentage }];
-    });
-    return [{ name, fullName, languages }];
+/** 严格读取完整汇总；拒绝非法数值，不截断语言列表或重算后端占比，允许有效零统计。 */
+function mapLanguageStats(value: unknown): ShowcaseLanguageStats {
+  const item = object(value);
+  const integer = (input: unknown): input is number =>
+    typeof input === "number" && Number.isSafeInteger(input) && input >= 0;
+  if (!item || !integer(item.repositoryCount) || !integer(item.repositoriesWithLanguages) ||
+      !integer(item.totalBytes) || item.repositoriesWithLanguages > item.repositoryCount ||
+      !Array.isArray(item.languages)) throw new PublicApiError(200, "INVALID_LANGUAGE_STATS");
+  const { repositoryCount, repositoriesWithLanguages, totalBytes } = item;
+  const languages = item.languages.map((raw) => {
+    const language = object(raw);
+    const name = text(language?.name, 100);
+    const bytes = language?.bytes;
+    const percentage = language?.percentage;
+    const repositoryCount = language?.repositoryCount;
+    if (!name || !integer(bytes) || !integer(repositoryCount) ||
+        repositoryCount > repositoriesWithLanguages || typeof percentage !== "number" ||
+        !Number.isFinite(percentage) || percentage < 0 || percentage > 100)
+      throw new PublicApiError(200, "INVALID_LANGUAGE_STATS");
+    return { name, bytes, percentage, repositoryCount };
   });
+  return {
+    repositoryCount,
+    repositoriesWithLanguages,
+    totalBytes,
+    languages,
+  };
 }
 
 function mapStatus(value: unknown): ShowcaseStatus | null {
@@ -605,8 +613,8 @@ export function useShowcaseData(options: ShowcaseDataOptions = {}) {
       case "github.pinned":
         data.value.projects = [];
         break;
-      case "github.languages":
-        data.value.languages = [];
+      case "github.language-stats":
+        data.value.languageStats = null;
         break;
       case "github.activity":
         data.value.activity = [];
@@ -670,12 +678,8 @@ export function useShowcaseData(options: ShowcaseDataOptions = {}) {
             : items;
         break;
       }
-      case "github.languages": {
-        const items = mapLanguages(value);
-        data.value.languages =
-          append && items.length
-            ? merge(data.value.languages, items, (item) => item.fullName)
-            : items;
+      case "github.language-stats": {
+        data.value.languageStats = mapLanguageStats(value);
         break;
       }
       case "github.contributions":
@@ -735,8 +739,8 @@ export function useShowcaseData(options: ShowcaseDataOptions = {}) {
           : 0;
       case "github.pinned":
         return data.value.projects.length;
-      case "github.languages":
-        return data.value.languages.length;
+      case "github.language-stats":
+        return data.value.languageStats?.languages.length ?? 0;
       case "github.activity":
         return data.value.activity.length;
       case "github.contributions":
