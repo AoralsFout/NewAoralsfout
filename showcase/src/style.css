@@ -1056,27 +1056,35 @@
   }
   .contact-links {
     display: flex;
+    flex-wrap: wrap;
     border-top: 1px solid #ffffff50;
     padding-top: 22px;
     gap: 40px;
     align-items: flex-end;
   }
-  .contact-links > a {
+  .contact-link-item {
     font-family: var(--mono);
-    font-size: 12px;
-    min-height: 44px;
+    font-size: 14px;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
-  .contact-links > a > span {
+  .contact-link-item > span:first-child {
     display: block;
     font-family: var(--body);
-    font-size: 10px;
+    font-size: 12px;
     margin-bottom: 7px;
   }
-  .contact-links > a > svg {
+  .contact-link-item > a {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+  }
+  .contact-link-item > a > svg {
     margin-left: 12px;
   }
-  .contact-links > a:last-child {
-    margin-left: auto;
+  .contact-value {
+    overflow-wrap: anywhere;
+    user-select: text;
   }
   .site-footer {
     display: flex;
@@ -1231,15 +1239,19 @@
     gap: 8px;
     min-width: 0;
   }
-  .contact-detail-row span {
+  .contact-detail-row span:not(.contact-value) {
     color: var(--muted);
     font-size: 11px;
   }
-  .contact-detail-row a {
+  .contact-detail-row a,
+  .contact-detail-row .contact-value {
     font-family: var(--mono);
     font-size: 17px;
     color: var(--blue);
     overflow-wrap: anywhere;
+  }
+  .contact-detail-row .contact-value {
+    color: var(--ink);
   }
   .contact-github {
     display: flex;
@@ -1316,8 +1328,8 @@
     .contact-links {
       gap: 20px;
     }
-    .contact-links > a {
-      font-size: 10px;
+    .contact-link-item {
+      font-size: 14px;
     }
   }
   @media (max-width: 767px) {
@@ -1650,14 +1662,11 @@
       gap: 15px;
       padding-top: 20px;
     }
-    .contact-links > a {
-      font-size: 11px;
+    .contact-link-item {
+      font-size: 14px;
     }
-    .contact-links > a:last-child {
-      margin-left: 0;
-    }
-    .contact-links > a > span {
-      font-size: 9px;
+    .contact-link-item > span:first-child {
+      font-size: 12px;
       margin-bottom: 4px;
     }
     .site-footer {
@@ -1694,7 +1703,8 @@
     .detail-body h2 {
       font-size: 31px;
     }
-    .contact-detail-row a {
+    .contact-detail-row a,
+    .contact-detail-row .contact-value {
       font-size: 14px;
     }
     .contact-github {

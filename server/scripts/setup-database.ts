@@ -1,4 +1,4 @@
-/** 增量数据库初始化入口；建表、移除旧接单字段并初始化固定模块，支持重复执行，不重置或删表。 */
+/** 增量数据库初始化入口；建表、移除旧接单字段、新增联系方式表并初始化模块，支持重复执行，不重置或删表。 */
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import mysql from 'mysql2/promise';
@@ -19,6 +19,8 @@ async function main() {
       const migration = await readFile(resolve('prisma/migrations/202610090002_remove_availability/migration.sql'), 'utf8');
       await connection.query(migration);
     }
+    const contactMigration = await readFile(resolve('prisma/migrations/202610090003_contact_methods/migration.sql'), 'utf8');
+    await connection.query(contactMigration);
     await initializeModules();
     console.log('展示站表结构更新及模块初始化完成');
   } finally { await connection.end(); await prisma.$disconnect(); }

@@ -19,6 +19,7 @@ export const modules = [
   { id: 'neoblog.archive', name: 'NeoBlog 归档', source: 'neoblog', interval: 15 * minute, list: true, items: false, parent: 'neoblog.articles' },
   { id: 'L07', name: '当前状态', source: 'local', interval: 0, list: false, items: false },
   { id: 'L08', name: '学习目标', source: 'local', interval: 0, list: true, items: false },
+  { id: 'contacts', name: '联系方式', source: 'local', interval: 0, list: true, items: false },
 ] as const;
 export type ModuleId = typeof modules[number]['id'];
 export function findModule(id: string) { return modules.find(m => m.id === id); }

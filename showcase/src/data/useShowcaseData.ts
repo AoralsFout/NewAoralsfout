@@ -1,4 +1,4 @@
-/** 展示数据组合式函数；默认读取公开 API，导出真实数据、模块状态、分类与分页操作，样例模式须显式启用。 */
+/** 展示数据组合式函数；默认读取公开 API，导出内容与联系方式、模块状态、分类和分页操作，样例模式须显式启用。 */
 import { computed, onMounted, onScopeDispose, ref } from "vue";
 import { createMockShowcaseData } from "./mock";
 import type {
@@ -13,6 +13,7 @@ import type {
   ShowcaseArticle,
   ShowcaseCollection,
   ShowcaseContributions,
+  ShowcaseContactMethod,
   ShowcaseData,
   ShowcaseGoal,
   ShowcaseMetadata,
@@ -58,6 +59,7 @@ const moduleIds: ModuleId[] = [
   "neoblog.articles",
   "L07",
   "L08",
+  "contacts",
 ];
 const defaultModules = moduleIds.filter(
   (id) => id !== "github.activity" && id !== "github.contributions" && id !== "github.languages",
@@ -70,6 +72,7 @@ const listModules = new Set<ModuleId>([
   "bangumi.collections",
   "neoblog.articles",
   "L08",
+  "contacts",
 ]);
 const bangumiCategories: BangumiCategory[] = [
   "watched",
@@ -159,6 +162,7 @@ function emptyData(): ShowcaseData {
     languages: [],
     articles: [],
     goals: [],
+    contacts: [],
     activity: [],
     contributions: null,
     steamProfile: null,
@@ -168,6 +172,16 @@ function emptyData(): ShowcaseData {
   };
 }
 
+/** 接受可展示的联系方式记录；无效链接保留为纯文本，不从外部数据推断额外联系方式。 */
+function mapContacts(value: unknown): ShowcaseContactMethod[] {
+  return list(value).flatMap(raw => {
+    const item = object(raw), id = item?.id;
+    const type = text(item?.type, 32), label = text(item?.label, 100), content = text(item?.value, 500);
+    return typeof id === 'number' && Number.isSafeInteger(id) && id > 0 && type && label && content
+      ? [{ id: String(id), type, label, value: content, url: safeUrl(item?.url) || null }]
+      : [];
+  });
+}
 function mapProfile(value: unknown): ShowcaseProfile {
   const base = emptyData().profile;
   const item = object(value);
@@ -625,10 +639,18 @@ export function useShowcaseData(options: ShowcaseDataOptions = {}) {
       case "L08":
         data.value.goals = [];
         break;
+      case "contacts":
+        data.value.contacts = [];
+        break;
     }
   }
   function apply(id: ModuleId, value: unknown, append: boolean) {
     switch (id) {
+      case "contacts": {
+        const items = mapContacts(value);
+        data.value.contacts = append && items.length ? merge(data.value.contacts, items, item => item.id) : items;
+        break;
+      }
       case "github.profile":
         data.value.profile = mapProfile(value);
         break;
@@ -736,6 +758,8 @@ export function useShowcaseData(options: ShowcaseDataOptions = {}) {
         return data.value.status ? 1 : 0;
       case "L08":
         return data.value.goals.length;
+      case "contacts":
+        return data.value.contacts.length;
     }
   }
   function updateError() {
@@ -749,7 +773,9 @@ export function useShowcaseData(options: ShowcaseDataOptions = {}) {
   function path(id: ModuleId, page: number, category: BangumiCategory): string {
     if (id === "L07") return "/personal-status";
     const endpoint =
-      id === "L08"
+      id === "contacts"
+        ? "/contacts"
+        : id === "L08"
         ? "/learning-goals"
         : `/showcase/modules/${encodeURIComponent(id)}/data`;
     if (!listModules.has(id)) return endpoint;
@@ -909,7 +935,7 @@ export function useShowcaseData(options: ShowcaseDataOptions = {}) {
         const state: ShowcaseModuleState["state"] = !module
           ? "hidden"
           : !module.available
-            ? id === "L07" || id === "L08"
+            ? id === "L07" || id === "L08" || id === "contacts"
               ? "empty"
               : "unavailable"
             : "idle";
@@ -917,7 +943,7 @@ export function useShowcaseData(options: ShowcaseDataOptions = {}) {
           source: sourceOf(id),
           state,
           pagination:
-            id === "L08" && state === "empty"
+            (id === "L08" || id === "contacts") && state === "empty"
               ? { page: 1, limit: pageSize, total: 0, hasMore: false }
               : undefined,
         };

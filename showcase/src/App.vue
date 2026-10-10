@@ -26,7 +26,7 @@ import type {
   ShowcaseArticle,
   ShowcaseProject,
 } from "./data/types";
-import { contacts } from "./config/contact";
+import { contactHref } from "./config/contact";
 
 // 三维装置延迟加载，文字、导航和公开数据不依赖 WebGL 初始化。
 const HeroSculpture = defineAsyncComponent(
@@ -56,6 +56,7 @@ const {
     "bangumi.collections",
     "L07",
     "L08",
+    "contacts",
   ],
   pageSize: 12,
 });
@@ -109,7 +110,7 @@ const nav = computed(() => [
     ? [{ id: "offscreen", label: "日常" }]
     : []),
   { id: "about", label: "关于" },
-  { id: "contact", label: "联系" },
+  ...(exposed('contacts') ? [{ id: "contact", label: "联系" }] : []),
 ]);
 const firstSection = computed(() => nav.value[0]?.id ?? "about");
 const dialogTitle = computed(
@@ -244,13 +245,13 @@ function afterClose() {
   copyMessage.value = "";
   clearTimeout(copyTimer);
 }
-/** 剪贴板不可用时保留可选中的邮箱和 mailto 入口。 */
-async function copyEmail(address: string) {
+/** 剪贴板不可用时保留可选中的联系方式文本；不要求自定义账号必须有跳转链接。 */
+async function copyContact(value: string) {
   try {
-    await navigator.clipboard.writeText(address);
-    copyMessage.value = "邮箱已复制";
+    await navigator.clipboard.writeText(value);
+    copyMessage.value = "联系方式已复制";
   } catch {
-    copyMessage.value = "请选中邮箱文字复制，或点击邮箱写信";
+    copyMessage.value = "请选中联系方式文字后手动复制";
   }
   clearTimeout(copyTimer);
   copyTimer = setTimeout(() => {
@@ -305,6 +306,8 @@ onMounted(() => {
   void syncSections();
 });
 watch([data, moduleStates, projectFilter], syncSections, { deep: true });
+// 模块关闭后联系弹窗同步退出，避免保留已经撤回的入口。
+watch(() => exposed('contacts'), visible => { if (!visible && showContact.value) closeDetail(); });
 // 刷新、分页失败或模块撤回都可能清除公开列表，弹窗不能继续保留已撤回的数据副本。
 watch([() => data.value.projects, () => data.value.articles], () => {
   if (selectedProject.value) {
@@ -944,6 +947,7 @@ onUnmounted(() => {
       </section>
 
       <section
+        v-if="exposed('contacts')"
         id="contact"
         class="contact-section section-shell textured-section"
         aria-labelledby="contact-title"
@@ -966,22 +970,14 @@ onUnmounted(() => {
           </button>
         </div>
         <div class="contact-links">
-          <a v-if="contacts.workEmail" :href="'mailto:' + contacts.workEmail"
-            ><span>工作联系</span>{{ contacts.workEmail
-            }}<AppIcon :size="18" /></a
-          ><a
-            v-if="contacts.personalEmail"
-            :href="'mailto:' + contacts.personalEmail"
-            ><span>个人邮件</span>{{ contacts.personalEmail
-            }}<AppIcon :size="18" /></a
-          ><a
-            v-if="contacts.githubUrl"
-            :href="contacts.githubUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            ><span>代码与项目</span>GitHub<AppIcon :size="18"
-          /></a>
+          <div v-for="contact in data.contacts" :key="contact.id" class="contact-link-item">
+            <span>{{ contact.label }}</span>
+            <a v-if="contactHref(contact)" :href="contactHref(contact)" :target="contact.url ? '_blank' : undefined" rel="noopener noreferrer">{{ contact.value }}<AppIcon :size="18" /></a>
+            <span v-else class="contact-value">{{ contact.value }}</span>
+          </div>
         </div>
+        <p v-if="!data.contacts.length" role="status">{{ emptyMessage('contacts', '暂无公开联系方式。') }}</p>
+        <button v-if="moreVisible('contacts')" class="load-more" :disabled="busy('contacts')" @click="showMore('contacts', $event)">{{ busy('contacts') ? '读取中…' : '更多联系方式' }}</button>
       </section>
     </main>
     <footer class="site-footer">
@@ -1104,36 +1100,12 @@ onUnmounted(() => {
           <span class="section-label mono">SAY HELLO</span>
           <h2 id="detail-title">{{ dialogTitle }}</h2>
           <p class="detail-lead">关于一个项目、一点灵感，或者只是打个招呼。</p>
-          <div
-            v-for="item in [
-              { label: '工作联系', email: contacts.workEmail },
-              { label: '个人邮件', email: contacts.personalEmail },
-            ]"
-            :key="item.label"
-            class="contact-detail-row"
-          >
-            <template v-if="item.email"
-              ><div>
-                <span>{{ item.label }}</span
-                ><a :href="'mailto:' + item.email">{{ item.email }}</a>
-              </div>
-              <button
-                class="icon-button"
-                :aria-label="'复制' + item.label + '邮箱'"
-                @click="copyEmail(item.email)"
-              >
-                <AppIcon name="copy" :size="19" /></button
-            ></template>
+          <div v-for="contact in data.contacts" :key="contact.id" class="contact-detail-row">
+            <div><span>{{ contact.label }}</span><a v-if="contactHref(contact)" :href="contactHref(contact)" :target="contact.url ? '_blank' : undefined" rel="noopener noreferrer">{{ contact.value }}</a><span v-else class="contact-value">{{ contact.value }}</span></div>
+            <button class="icon-button" :aria-label="'复制' + contact.label" @click="copyContact(contact.value)"><AppIcon name="copy" :size="19" /></button>
           </div>
-          <a
-            v-if="contacts.githubUrl"
-            :href="contacts.githubUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="contact-github"
-            ><AppIcon name="github" :size="20" />在 GitHub 找到我<AppIcon
-              :size="18"
-          /></a>
+          <p v-if="!data.contacts.length" role="status">{{ emptyMessage('contacts', '暂无公开联系方式。') }}</p>
+          <button v-if="moreVisible('contacts')" class="load-more" :disabled="busy('contacts')" @click="loadMore('contacts')">更多联系方式</button>
           <p class="copy-status" role="status">{{ copyMessage }}</p>
         </div>
       </div>

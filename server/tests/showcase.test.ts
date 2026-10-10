@@ -1,4 +1,4 @@
-/** 展示站集成验收；使用内存数据库替身和可控上游验证 HTTP 鉴权、完整仓库分页、私有语言汇总、过滤及同步，不改共享业务数据。 */
+/** 展示站集成验收；使用内存数据库替身和可控上游验证 HTTP 鉴权、联系方式维护、完整仓库分页、语言汇总及过滤，不改共享业务数据。 */
 import { before, beforeEach, afterEach, after, test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import supertest from 'supertest';
@@ -9,6 +9,7 @@ process.env.FRONTEND_URL = 'http://localhost:5174';
 process.env.SYNC_ENABLED = 'false';
 let prisma: any, app: any, env: any, generateToken: any, refresh: any;
 let users: any[], goals: any[], personal: any, modules: any[], caches: Map<string, any>, overrides: any[];
+let contactMethods: any[], nextContactId: number;
 const origin = 'http://localhost:5174';
 const initialCache = (moduleId: string, payload: any = null): any => ({ moduleId, payload, lastAttemptAt: null, lastSuccessAt: payload === null ? null : new Date(), nextAttemptAt: null, lastResult: payload === null ? 'never' : 'ok', lastErrorCode: null, lastErrorMessage: null, upstreamStatus: null, durationMs: null, etag: null, blocked: false });
 /** 构造仓库上游响应；包含 Fork、归档与空字段，以验证新增接口的实际字段映射。 */
@@ -19,7 +20,7 @@ function http(id = 1) { return supertest(app).get('/api/showcase/admin/modules')
 before(async () => {
   const db = await import('../config/database'); prisma = db.default;
   // Prisma 委托由动态代理生成，没有标准方法描述符；测试中替换为禁止真实连接的普通委托。
-  for (const model of ['user', 'showcaseModule', 'showcaseCache', 'showcaseItemVisibility', 'personalStatus', 'learningGoal', 'article']) {
+  for (const model of ['user', 'showcaseModule', 'showcaseCache', 'showcaseItemVisibility', 'personalStatus', 'learningGoal', 'contactMethod', 'article']) {
     prisma[model] = Object.fromEntries(['findUnique', 'findMany', 'update', 'upsert', 'create', 'delete', 'deleteMany', 'count'].map(method => [method, () => { throw new Error(`测试未配置 ${model}.${method}`); }]));
   }
   prisma.$transaction = () => { throw new Error('测试未配置事务'); };
@@ -30,6 +31,7 @@ before(async () => {
 });
 beforeEach(async () => {
   users = [{ id: 1, role: 'ADMIN', status: 'NORMAL', token_version: 0 }, { id: 2, role: 'MEMBER', status: 'NORMAL', token_version: 0 }]; goals = []; personal = null; overrides = []; caches = new Map();
+  contactMethods = []; nextContactId = 1;
   const catalog = (await import('../src/showcase/catalog')).modules;
   modules = catalog.map(m => ({ id: m.id, source: m.source, visible: true }));
   env.steamKey = 'fixture-key'; env.steamId = '123'; env.bangumiUsername = 'fixture'; env.githubUsername = 'fixture'; env.githubToken = 'fixture-token'; env.blogUrl = 'https://blog.example'; env.blogAssetUrl = 'https://blog.example';
@@ -54,10 +56,63 @@ beforeEach(async () => {
   mock.method(prisma.learningGoal, 'create', async ({ data }: any) => { const goal = { id: goals.length + 1, description: null, progress: null, status: 'planned', visible: false, sortOrder: 0, ...data }; goals.push(goal); return goal; });
   mock.method(prisma.learningGoal, 'update', async ({ where, data }: any) => { const goal = goals.find(g => g.id === where.id); if (!goal) throw { code: 'P2025' }; return Object.assign(goal, data); });
   mock.method(prisma.learningGoal, 'delete', async ({ where }: any) => { const goal = goals.find(g => g.id === where.id); if (!goal) throw { code: 'P2025' }; goals = goals.filter(g => g.id !== where.id); return goal; });
+  const filterContacts = (where: any = {}) => contactMethods.filter(contact => (where.visible === undefined || contact.visible === where.visible) && (!where.type || contact.type === where.type));
+  mock.method(prisma.contactMethod, 'findMany', async ({ where, skip, take }: any) => filterContacts(where).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id).slice(skip, skip + take));
+  mock.method(prisma.contactMethod, 'count', async ({ where }: any) => filterContacts(where).length);
+  mock.method(prisma.contactMethod, 'create', async ({ data }: any) => { const contact = { id: nextContactId++, url: null, visible: false, sortOrder: 0, createdAt: new Date(), updatedAt: new Date(), ...data }; contactMethods.push(contact); return contact; });
+  mock.method(prisma.contactMethod, 'update', async ({ where, data }: any) => { const contact = contactMethods.find(item => item.id === where.id); if (!contact) throw { code: 'P2025' }; return Object.assign(contact, data, { updatedAt: new Date() }); });
+  mock.method(prisma.contactMethod, 'delete', async ({ where }: any) => { const contact = contactMethods.find(item => item.id === where.id); if (!contact) throw { code: 'P2025' }; contactMethods = contactMethods.filter(item => item.id !== where.id); return contact; });
   mock.method(prisma, '$transaction', async (operation: any) => typeof operation === 'function' ? operation(prisma) : Promise.all(operation));
 });
 afterEach(() => mock.restoreAll());
 after(async () => prisma.$disconnect());
+
+test('联系方式自定义类型增删改，默认隐藏，公开投影、排序及过滤后分页，模块关闭即时生效', async () => {
+  const create = (body: any) => supertest(app).post('/api/showcase/admin/contacts').set('Cookie', `nb_token=${token()}`).set('Origin', origin).send(body);
+  const patch = (id: number, body: any) => supertest(app).patch(`/api/showcase/admin/contacts/${id}`).set('Cookie', `nb_token=${token()}`).set('Origin', origin).send(body);
+  assert.equal((await supertest(app).get('/api/showcase/modules')).body.data.find((m: any) => m.id === 'contacts').available, false);
+  const hidden = await create({ type: 'wechat', label: '微信', value: 'hidden-account' });
+  assert.equal(hidden.status, 201); assert.equal(hidden.body.data.visible, false); assert.equal(hidden.body.data.url, null); assert.equal(hidden.body.data.sortOrder, 0);
+  const email = await create({ type: ' email ', label: ' 工作邮箱 ', value: ' hello@example.com ', visible: true, sortOrder: 2 });
+  assert.equal(email.body.data.label, '工作邮箱');
+  const custom = await create({ type: '自定义平台', label: '作品主页', value: '作品集', url: 'https://example.com/work', visible: true, sortOrder: 1 });
+  const duplicateOrder = await create({ type: 'phone', label: '电话', value: '+86 123456789', visible: true, sortOrder: 1 });
+  const first = await supertest(app).get('/api/contacts?limit=1');
+  assert.equal(first.status, 200); assert.deepEqual(first.body.pagination, { page: 1, limit: 1, total: 3 });
+  assert.deepEqual(Object.keys(first.body.data[0]).sort(), ['id', 'type', 'label', 'value', 'url', 'updatedAt'].sort());
+  assert.equal(first.body.data[0].id, custom.body.data.id);
+  assert.equal((await supertest(app).get('/api/contacts?page=2&limit=1')).body.data[0].id, duplicateOrder.body.data.id);
+  assert.equal((await supertest(app).get('/api/contacts?type=email')).body.data[0].value, 'hello@example.com');
+  assert.equal((await supertest(app).get('/api/showcase/modules')).body.data.find((m: any) => m.id === 'contacts').available, true);
+  const adminList = await supertest(app).get('/api/showcase/admin/contacts?visible=false').set('Cookie', `nb_token=${token()}`);
+  assert.equal(adminList.body.pagination.total, 1); assert.equal(adminList.body.data[0].value, 'hidden-account');
+  assert.equal((await patch(email.body.data.id, { value: 'changed@example.com', sortOrder: 0 })).status, 200);
+  assert.equal((await supertest(app).get('/api/contacts?limit=1')).body.data[0].value, 'changed@example.com');
+  await patch(email.body.data.id, { visible: false }); assert.equal((await supertest(app).get('/api/contacts')).body.pagination.total, 2);
+  await patch(custom.body.data.id, { url: null }); assert.equal((await supertest(app).get('/api/contacts?limit=1')).body.data[0].url, null);
+  modules.find(m => m.id === 'contacts').visible = false;
+  const closed = await supertest(app).get('/api/contacts'); assert.equal(closed.status, 200); assert.deepEqual(closed.body.data, []); assert.equal(closed.body.pagination.total, 0);
+  assert.equal((await supertest(app).get('/api/showcase/modules')).body.data.some((m: any) => m.id === 'contacts'), false);
+  assert.equal((await supertest(app).get('/api/showcase/admin/contacts').set('Cookie', `nb_token=${token()}`)).body.pagination.total, 4);
+  assert.equal((await supertest(app).delete(`/api/showcase/admin/contacts/${hidden.body.data.id}`).set('Cookie', `nb_token=${token()}`).set('Origin', origin)).status, 204);
+  assert.equal((await supertest(app).delete(`/api/showcase/admin/contacts/${hidden.body.data.id}`).set('Cookie', `nb_token=${token()}`).set('Origin', origin)).status, 404);
+});
+
+test('联系方式管理拒绝未登录、普通成员与错误 Origin，未知字段、危险链接和非法分页不能写入或绕过隐藏', async () => {
+  const body = { type: 'email', label: '邮箱', value: 'hello@example.com' };
+  assert.equal((await supertest(app).get('/api/showcase/admin/contacts')).status, 401);
+  assert.equal((await supertest(app).post('/api/showcase/admin/contacts').set('Origin', origin).send(body)).status, 401);
+  assert.equal((await supertest(app).get('/api/showcase/admin/contacts').set('Cookie', `nb_token=${token(2)}`)).status, 403);
+  assert.equal((await supertest(app).post('/api/showcase/admin/contacts').set('Cookie', `nb_token=${token()}`).send(body)).status, 403);
+  assert.equal((await supertest(app).post('/api/showcase/admin/contacts').set('Cookie', `nb_token=${token()}`).set('Origin', 'https://evil.example').send(body)).status, 403);
+  const create = (data: any) => supertest(app).post('/api/showcase/admin/contacts').set('Cookie', `nb_token=${token()}`).set('Origin', origin).send(data);
+  for (const change of [{ type: '' }, { label: ' ' }, { value: '' }, { value: 'line\nbreak' }, { type: 'x'.repeat(33) }, { value: 'x'.repeat(501) }, { sortOrder: -1 }, { sortOrder: 1.5 }, { visible: 'true' }, { id: 3 }, { createdAt: '2026-01-01' }, { url: 'javascript:alert(1)' }, { url: 'data:text/html,hello' }, { url: 'https://user:password@example.com' }, { url: 'https://exa\nmple.com' }]) assert.equal((await create({ ...body, ...change })).status, 400);
+  assert.equal(contactMethods.length, 0);
+  for (const query of ['page=0', 'limit=101', 'visible=false', 'type=', 'extra=true']) assert.equal((await supertest(app).get(`/api/contacts?${query}`)).status, 400);
+  const patch = (id: string, data: any) => supertest(app).patch(`/api/showcase/admin/contacts/${id}`).set('Cookie', `nb_token=${token()}`).set('Origin', origin).send(data);
+  assert.equal((await patch('1', {})).status, 400); assert.equal((await patch('0', { visible: true })).status, 400); assert.equal((await patch('999', { visible: true })).status, 404);
+  assert.equal((await supertest(app).get('/api/showcase/modules/contacts/data')).status, 404);
+});
 
 test('新增仓库模块初始化为隐藏且重复初始化保留已有开关', async () => {
   modules = modules.filter(m => m.id !== 'github.repositories');

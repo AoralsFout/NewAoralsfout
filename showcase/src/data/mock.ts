@@ -261,6 +261,10 @@ export const mockShowcaseData: ShowcaseData = {
       accent: "yellow",
     },
   ],
+  contacts: [
+    { id: 'sample-work-email', type: 'email', label: '工作联系', value: 'hello@example.com', url: null },
+    { id: 'sample-github', type: 'github', label: '代码与项目', value: 'GitHub', url: 'https://github.com/aoralsfout' },
+  ],
   sampleSections: [
     "profile",
     "status",
@@ -268,6 +272,7 @@ export const mockShowcaseData: ShowcaseData = {
     "languages",
     "articles",
     "goals",
+    "contacts",
     "activity",
     "contributions",
     "collections",

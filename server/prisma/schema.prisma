@@ -32,6 +32,21 @@ model LearningGoal {
   @@map("learning_goals")
 }
 
+/// 联系方式列表；支持自定义类型、展示名称、文本、链接、排序及单条可见性。
+model ContactMethod {
+  id Int @id @default(autoincrement())
+  type String @db.VarChar(32)
+  label String @db.VarChar(100)
+  value String @db.VarChar(500)
+  url String? @db.VarChar(2000)
+  visible Boolean @default(false)
+  sortOrder Int @default(0)
+  createdAt DateTime @default(now()) @db.DateTime(3)
+  updatedAt DateTime @updatedAt @db.DateTime(3)
+  @@index([visible, sortOrder, id])
+  @@map("contact_methods")
+}
+
 /// 固定模块开关；不接收任意来源或 URL。
 model ShowcaseModule {
   id String @id @db.VarChar(64)

@@ -1,4 +1,4 @@
-/** 管理应用入口；注册 Pinia 与四个维护页面路由并挂载应用。 */
+/** 管理应用入口；注册 Pinia 与状态、目标、联系方式、数据及设置页面路由并挂载应用。 */
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import { createRouter, createWebHistory } from 'vue-router';
@@ -7,11 +7,13 @@ import StatusPage from './pages/StatusPage.vue';
 import GoalsPage from './pages/GoalsPage.vue';
 import DataPage from './pages/DataPage.vue';
 import SettingsPage from './pages/SettingsPage.vue';
+import ContactsPage from './pages/ContactsPage.vue';
 import './style.css';
 const router = createRouter({ history: createWebHistory(), routes: [
   { path: '/', redirect: '/status' }, { path: '/auth/callback', redirect: '/status' },
   { path: '/status', component: StatusPage }, { path: '/goals', component: GoalsPage },
   { path: '/data', component: DataPage }, { path: '/settings', component: SettingsPage },
+  { path: '/contacts', component: ContactsPage },
   { path: '/:pathMatch(.*)*', redirect: '/status' },
 ] });
 createApp(App).use(createPinia()).use(router).mount('#app');

@@ -1,31 +1,18 @@
-/** 联系方式配置：导出站主确认的个人、工作邮箱及 GitHub 入口，允许通过 Vite 环境变量覆盖。 */
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** 联系方式链接规则：导出 contactHref；仅根据公开接口数据生成安全网页、邮件或拨号入口，不补静态联系方式。 */
+import type { ShowcaseContactMethod } from '../data/types';
 
-/** 无效配置不生成可操作链接，避免访客跳转到错误地址。 */
-function email(value: string | undefined, fallback: string): string {
-  const candidate = (value ?? fallback).trim();
-  return emailPattern.test(candidate) ? candidate : "";
-}
-
-function webUrl(value: string | undefined): string {
-  try {
-    const candidate = new URL(value ?? "https://github.com/aoralsfout");
-    return (candidate.protocol === "https:" ||
-      candidate.protocol === "http:") &&
-      !candidate.username &&
-      !candidate.password
-      ? candidate.href
-      : "";
-  } catch {
-    return "";
+/** 自定义账号默认只展示和复制；明确网页链接优先，其次识别 email、phone 类型。 */
+export function contactHref(contact: ShowcaseContactMethod): string {
+  if (contact.url) {
+    try {
+      const url = new URL(contact.url);
+      if (['https:', 'http:'].includes(url.protocol) && !url.username && !url.password) return url.href;
+    } catch { /* 无效链接保留文本展示，不生成跳转。 */ }
   }
+  if (contact.type.toLowerCase() === 'email' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.value)) return `mailto:${encodeURIComponent(contact.value)}`;
+  if (contact.type.toLowerCase() === 'phone') {
+    const value = contact.value.replace(/[ ()-]/g, '');
+    if (/^\+?\d{3,20}$/.test(value)) return `tel:${value}`;
+  }
+  return '';
 }
-
-export const contacts = {
-  workEmail: email(import.meta.env.VITE_CONTACT_EMAIL, "aoralsfout@zyghit.cn"),
-  personalEmail: email(
-    import.meta.env.VITE_PERSONAL_EMAIL,
-    "aoralsfout@gmail.com",
-  ),
-  githubUrl: webUrl(import.meta.env.VITE_CONTACT_URL),
-};

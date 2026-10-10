@@ -2,7 +2,7 @@
 
 # AoralsFout 展示站
 
-后端位于 `server/`，独立于 NeoBlog 进程运行，连接同一 MySQL 数据库。管理页面位于 `management/`，采用 Vue、Pinia 和简单表单、列表；个人展示页面位于 `showcase/`，采用 Vue、GSAP 和 Three.js，默认通过公开 API 展示真实内容。项目提供公开展示 API、四个管理页面和个人展示主页。
+后端位于 `server/`，独立于 NeoBlog 进程运行，连接同一 MySQL 数据库。管理页面位于 `management/`，采用 Vue、Pinia 和简单表单、列表；个人展示页面位于 `showcase/`，采用 Vue、GSAP 和 Three.js，默认通过公开 API 展示真实内容。项目提供公开展示 API、五个管理页面和个人展示主页。
 
 ## 本地运行
 
@@ -20,11 +20,11 @@ npm run dev
 
 展示页面：`http://localhost:5173`；管理页面：`http://localhost:5174`；后端：`http://localhost:3002`。请使用 `localhost` 访问管理页面，以匹配默认的 Origin 配置。端口固定，已被占用时会报错。两个前端的接口均经 Vite `/api` 代理同源访问。
 
-单独运行展示页面时执行 `npm run dev -w showcase`，默认从 `http://localhost:3002` 的公开 API 获取 GitHub 项目与动态、NeoBlog 文章、Steam 游戏库、Bangumi 五类收藏及已有个人记录。API 隐藏、不可用、失败和成功空结果均不会补入 mock；离线设计预览须显式设置 `VITE_SHOWCASE_DATA_MODE=mock`。联系方式通过前端环境变量配置。详细说明见 [showcase/README.md](showcase/README.md)。
+单独运行展示页面时执行 `npm run dev -w showcase`，默认从 `http://localhost:3002` 的公开 API 获取 GitHub 项目与动态、NeoBlog 文章、Steam 游戏库、Bangumi 五类收藏及已有个人记录。API 隐藏、不可用、失败和成功空结果均不会补入 mock；离线设计预览须显式设置 `VITE_SHOWCASE_DATA_MODE=mock`。联系方式在管理页自定义列表中维护，通过公开 API 展示。详细说明见 [showcase/README.md](showcase/README.md)。
 
 本次联调已准备忽略的 `server/.env`，无需再次覆盖。它复用 NeoBlog 的 MySQL、JWT 和 Natayark OAuth 配置，以及 AboutMe 的 Steam 参数。Bangumi 账号和 GitHub 用户名来自已有项目配置及资料；凭据不会写入仓库。
 
-`db:setup` 执行 `server/prisma/migrations/202610090001_showcase/migration.sql` 的五张新表建表语句；若当前状态表仍有旧 `availability` 字段，再执行 `202610090002_remove_availability/migration.sql` 删除该字段及其接单数据，保留描述、有效期和可见性。随后幂等初始化 16 个模块，新模块默认隐藏，已有开关保持原值，整个流程支持重复执行。不执行删表、重置数据库或 NeoBlog 迁移历史操作。共享库不使用 `prisma migrate reset`、`db push` 或本仓库独立的 `migrate deploy` 接管整个数据库；增量 SQL 应纳入实际部署流程。
+`db:setup` 执行 `server/prisma/migrations/202610090001_showcase/migration.sql` 的五张新表建表语句；若当前状态表仍有旧 `availability` 字段，再执行 `202610090002_remove_availability/migration.sql` 删除该字段及其接单数据，保留描述、有效期和可见性。随后执行 `202610090003_contact_methods/migration.sql` 创建联系方式表，幂等初始化 17 个模块。新模块默认隐藏，已有开关保持原值，整个流程支持重复执行。不执行删表、重置数据库或 NeoBlog 迁移历史操作。共享库不使用 `prisma migrate reset`、`db push` 或本仓库独立的 `migrate deploy` 接管整个数据库；增量 SQL 应纳入实际部署流程。
 
 已有数据库升级时，先停止后端，执行 `npm run db:setup` 和 `npm run db:generate -w server`，再构建并启动服务。
 
@@ -52,14 +52,19 @@ npm run dev
 
 - 当前状态：描述、有效期、可见性；过期后整条停止公开。
 - 学习目标：新增、编辑、进度、状态、顺序、单条可见性、分页筛选和确认删除。
+- 联系方式：自定义类型、展示名称、文本或账号、可选 HTTP(S) 链接、顺序、单条可见性、分页筛选和确认删除。
 - 数据与 API 状态：来源配置状态、采集结果、新鲜度、更新时间、耗时、脱敏错误、手动刷新及完整缓存查看。
 - 展示设置：模块开关和受支持列表条目的隐藏／恢复。
 
 所有管理接口使用 NeoBlog 的 `authenticate`、`requireAdmin`，校验数据库最新角色、账号状态与 `token_version`。退出会增加令牌版本；因为数据库共享，也会撤销该用户的 NeoBlog 会话。管理写入和退出要求 Origin 精确匹配管理来源。OAuth state 同时验证签名和发起浏览器 Cookie，避免只验签时的登录 CSRF。
 
-公开读取不会触发上游采集，且使用 `Cache-Control: no-store`。模块默认关闭；本地状态和目标也需自己的可见性允许。列表先隐藏过滤再统计和分页；管理员登录后访问公开 API 仍遵循公开规则。
+公开读取不会触发上游采集，且使用 `Cache-Control: no-store`。模块默认关闭；本地状态、目标和联系方式也需自己的可见性允许。列表先隐藏过滤再统计和分页；管理员登录后访问公开 API 仍遵循公开规则。
 
-公开接口为 `/api/showcase/modules`、`/api/showcase/modules/:moduleId/data`、`/api/personal-status` 和 `/api/learning-goals`；管理接口以 `/api/showcase/admin` 为前缀，内容契约见原后端设计文档。
+公开接口为 `/api/showcase/modules`、`/api/showcase/modules/:moduleId/data`、`/api/personal-status`、`/api/learning-goals` 和 `/api/contacts`；管理接口以 `/api/showcase/admin` 为前缀，内容契约见[后端设计文档](docs/design/后端设计文档.md)。
+
+`GET /api/contacts?page=1&limit=20&type=email` 返回公开联系方式，类型筛选可省略，按 `sortOrder` 升序、同值按 ID 升序排列。返回字段为 `id`、`type`、`label`、`value`、`url`、`updatedAt`，附带 `pagination`；模块关闭时返回空列表和总数 0。管理员通过 `GET/POST /api/showcase/admin/contacts`、`PATCH/DELETE /api/showcase/admin/contacts/:id` 维护列表；管理读取另外支持 `visible=true|false` 筛选。
+
+新建联系方式要求 `type`、`label`、`value`，其他字段默认 `url: null`、`visible: false`、`sortOrder: 0`。新部署列表为空，不自动导入旧前端环境变量；先在管理页“联系方式”添加条目，再在“展示设置”开启 `contacts` 模块。保存和隐藏后，后续公开请求立即读取数据库。
 
 全部仓库语言统计入口为 `GET /api/showcase/modules/github.language-stats/data`，默认每 24 小时同步。它统计配置账号名下全部公开和私有仓库，含 Fork、归档和空仓库；返回总仓库数、具有语言数据的仓库数、代码总字节及各语言的字节数、占比和涉及仓库数。缓存、公开及管理接口都只保存或返回汇总，不返回私有仓库名称、地址或逐仓库明细。汇总独立于公开仓库、置顶仓库模块的单条隐藏设置。
 
@@ -84,7 +89,7 @@ npm run build
 npm exec -w server -- tsx scripts/verify-runtime.ts
 ```
 
-HTTP 集成测试使用内存数据库替身和可控上游，覆盖权限、会话撤销、Origin、状态有效期、目标 CRUD、分页校验、字段白名单、关联隐藏、快照保留、成功空结果、隐私撤回、限流、同步重入、Bangumi 全分页及 GitHub ETag。根构建依次检查并构建后端、管理页和展示页；只构建展示页使用 `npm run build -w showcase`。
+HTTP 集成测试使用内存数据库替身和可控上游，覆盖权限、会话撤销、Origin、状态有效期、目标及联系方式 CRUD、分页校验、字段白名单、关联隐藏、快照保留、成功空结果、隐私撤回、限流、同步重入、Bangumi 全分页及 GitHub ETag。根构建依次检查并构建后端、管理页和展示页；只构建展示页使用 `npm run build -w showcase`。
 
 HTTP 集成验收覆盖 GitHub GraphQL 数据映射、全部公开仓库完整分页、公开与私有仓库语言汇总、Token 身份和数量校验、父快照并发变化和已确认的账号／仓库隐私撤回。展示前端接入时，按用户授权在管理页开启 14 个现有模块；保留条目级隐藏规则，没有触发上游采集。新部署及后来新增的模块初始化仍默认关闭。
 

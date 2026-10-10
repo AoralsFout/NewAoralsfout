@@ -17,7 +17,8 @@ export type ModuleId =
   | "bangumi.collections"
   | "neoblog.articles"
   | "L07"
-  | "L08";
+  | "L08"
+  | "contacts";
 
 export interface ShowcasePagination {
   page: number;
@@ -133,6 +134,15 @@ export interface ShowcaseGoal {
   status: GoalStatus;
 }
 
+/** 公开联系方式；类型可自定义，缺少链接时保留文本与复制操作。 */
+export interface ShowcaseContactMethod {
+  id: string;
+  type: string;
+  label: string;
+  value: string;
+  url: string | null;
+}
+
 export interface ShowcaseActivity {
   id: string;
   type: string;
@@ -177,6 +187,7 @@ export interface ShowcaseData {
   languages: ShowcaseRepositoryLanguages[];
   articles: ShowcaseArticle[];
   goals: ShowcaseGoal[];
+  contacts: ShowcaseContactMethod[];
   activity: ShowcaseActivity[];
   contributions: ShowcaseContributions | null;
   steamProfile: ShowcaseSteamProfile | null;
@@ -190,6 +201,7 @@ export interface ShowcaseData {
     | "languages"
     | "articles"
     | "goals"
+    | "contacts"
     | "activity"
     | "contributions"
     | "collections"
